@@ -1,60 +1,60 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Chain specifications for the test runtime.
 
 use babe_primitives::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
 use pallet_staking::Forcing;
-use vine_primitives::v2::{AccountId, AssignmentId, ValidatorId, MAX_CODE_SIZE, MAX_POV_SIZE};
-use vine_service::chain_spec::{
-	get_account_id_from_seed, get_from_seed, vine_chain_spec_properties, Extensions,
+use polkadot_primitives::{AccountId, AssignmentId, ValidatorId, MAX_CODE_SIZE, MAX_POV_SIZE};
+use polkadot_service::chain_spec::{
+	get_account_id_from_seed, get_from_seed, polkadot_chain_spec_properties, Extensions,
 };
-use vine_test_runtime::BABE_GENESIS_EPOCH_CONFIG;
+use polkadot_test_runtime::BABE_GENESIS_EPOCH_CONFIG;
 use sc_chain_spec::{ChainSpec, ChainType};
 use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 use sp_core::sr25519;
 use sp_runtime::Perbill;
-use test_runtime_constants::currency::VNES;
+use test_runtime_constants::currency::DOTS;
 
-const DEFAULT_PROTOCOL_ID: &str = "vine";
+const DEFAULT_PROTOCOL_ID: &str = "dot";
 
-/// The `ChainSpec` parameterized for vine test runtime.
-pub type VineChainSpec =
-	sc_service::GenericChainSpec<vine_test_runtime::GenesisConfig, Extensions>;
+/// The `ChainSpec` parameterized for polkadot test runtime.
+pub type PolkadotChainSpec =
+	sc_service::GenericChainSpec<polkadot_test_runtime::GenesisConfig, Extensions>;
 
 /// Local testnet config (multivalidator Alice + Bob)
-pub fn vine_local_testnet_config() -> VineChainSpec {
-	VineChainSpec::from_genesis(
+pub fn polkadot_local_testnet_config() -> PolkadotChainSpec {
+	PolkadotChainSpec::from_genesis(
 		"Local Testnet",
 		"local_testnet",
 		ChainType::Local,
-		|| vine_local_testnet_genesis(),
+		|| polkadot_local_testnet_genesis(),
 		vec![],
 		None,
 		Some(DEFAULT_PROTOCOL_ID),
 		None,
-		Some(vine_chain_spec_properties()),
+		Some(polkadot_chain_spec_properties()),
 		Default::default(),
 	)
 }
 
 /// Local testnet genesis config (multivalidator Alice + Bob)
-pub fn vine_local_testnet_genesis() -> vine_test_runtime::GenesisConfig {
-	vine_testnet_genesis(
+pub fn polkadot_local_testnet_genesis() -> polkadot_test_runtime::GenesisConfig {
+	polkadot_testnet_genesis(
 		vec![get_authority_keys_from_seed("Alice"), get_authority_keys_from_seed("Bob")],
 		get_account_id_from_seed::<sr25519::Public>("Alice"),
 		None,
@@ -93,8 +93,8 @@ fn testnet_accounts() -> Vec<AccountId> {
 	]
 }
 
-/// Helper function to create vine `GenesisConfig` for testing
-fn vine_testnet_genesis(
+/// Helper function to create polkadot `GenesisConfig` for testing
+fn polkadot_testnet_genesis(
 	initial_authorities: Vec<(
 		AccountId,
 		AccountId,
@@ -106,13 +106,13 @@ fn vine_testnet_genesis(
 	)>,
 	root_key: AccountId,
 	endowed_accounts: Option<Vec<AccountId>>,
-) -> vine_test_runtime::GenesisConfig {
-	use vine_test_runtime as runtime;
+) -> polkadot_test_runtime::GenesisConfig {
+	use polkadot_test_runtime as runtime;
 
 	let endowed_accounts: Vec<AccountId> = endowed_accounts.unwrap_or_else(testnet_accounts);
 
-	const ENDOWMENT: u128 = 1_000_000 * VNES;
-	const STASH: u128 = 100 * VNES;
+	const ENDOWMENT: u128 = 1_000_000 * DOTS;
+	const STASH: u128 = 100 * DOTS;
 
 	runtime::GenesisConfig {
 		system: runtime::SystemConfig {
@@ -146,7 +146,7 @@ fn vine_testnet_genesis(
 			validator_count: 2,
 			stakers: initial_authorities
 				.iter()
-				.map(|x| (x.0.clone(), x.1.clone(), STASH, runtime::StakerStatus::Validator))
+				.map(|x| (x.0.clone(), x.0.clone(), STASH, runtime::StakerStatus::Validator))
 				.collect(),
 			invulnerables: initial_authorities.iter().map(|x| x.0.clone()).collect(),
 			force_era: Forcing::NotForcing,
@@ -163,7 +163,7 @@ fn vine_testnet_genesis(
 		vesting: runtime::VestingConfig { vesting: vec![] },
 		sudo: runtime::SudoConfig { key: Some(root_key) },
 		configuration: runtime::ConfigurationConfig {
-			config: vine_runtime_parachains::configuration::HostConfiguration {
+			config: polkadot_runtime_parachains::configuration::HostConfiguration {
 				validation_upgrade_cooldown: 10u32,
 				validation_upgrade_delay: 5,
 				code_retention_period: 1200,

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 
@@ -21,7 +21,7 @@ use frame_benchmarking::{benchmarks, whitelist_account};
 use frame_support::traits::{OnFinalize, OnInitialize};
 use frame_system::RawOrigin;
 use pallet_staking::testing_utils::create_validators;
-use primitives::v2::{Hash, PARACHAIN_KEY_TYPE_ID};
+use primitives::{Hash, PARACHAIN_KEY_TYPE_ID};
 use sp_runtime::traits::{One, StaticLookup};
 use sp_session::MembershipProof;
 
@@ -109,8 +109,9 @@ where
 
 	let validator_index = ValidatorIndex(0);
 	let losers = [validator_index].into_iter();
+	let backers = losers.clone();
 
-	T::SlashingHandler::punish_against_valid(session_index, CANDIDATE_HASH, losers);
+	T::SlashingHandler::punish_for_invalid(session_index, CANDIDATE_HASH, losers, backers);
 
 	let unapplied = <UnappliedSlashes<T>>::get(session_index, CANDIDATE_HASH);
 	assert_eq!(unapplied.unwrap().keys.len(), 1);
@@ -123,7 +124,7 @@ fn dispute_proof(
 	validator_id: ValidatorId,
 	validator_index: ValidatorIndex,
 ) -> DisputeProof {
-	let kind = SlashingOffenceKind::AgainstValid;
+	let kind = SlashingOffenceKind::ForInvalid;
 	let time_slot = DisputesTimeSlot::new(session_index, CANDIDATE_HASH);
 
 	DisputeProof { time_slot, kind, validator_index, validator_id }
@@ -134,7 +135,7 @@ benchmarks! {
 		where T: Config<KeyOwnerProof = MembershipProof>,
 	}
 
-	// in this setup we have a single `AgainstValid` dispute
+	// in this setup we have a single `ForInvalid` dispute
 	// submitted for a past session
 	report_dispute_lost {
 		let n in 4..<<T as super::Config>::BenchmarkingConfig as BenchmarkingConfiguration>::MAX_VALIDATORS;

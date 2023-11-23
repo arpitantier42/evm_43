@@ -3,7 +3,8 @@ timeout = 1000
 
 [relaychain]
 default_image = "{{ZOMBIENET_INTEGRATION_TEST_IMAGE}}"
-command = "vine"
+chain = "rococo-local"
+command = "polkadot"
 
   [[relaychain.nodes]]
   name = "alice"
@@ -20,7 +21,7 @@ addToGenesis = false
   [parachains.collator]
   name = "collator01"
   image = "{{COL_IMAGE}}"
-  command = "/usr/local/bin/adder-collator"
+  command = "adder-collator"
   args = [ "-lruntime=debug,parachain=trace" ]
 
 [types.Header]

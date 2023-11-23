@@ -1,20 +1,20 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use vine_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_node_metrics::metrics::{self, prometheus};
 
 #[derive(Clone)]
 pub(crate) struct MetricsInner {
@@ -57,7 +57,7 @@ impl metrics::Metrics for Metrics {
 			chain_api_requests: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_runtime_api_requests_total",
+						"polkadot_parachain_runtime_api_requests_total",
 						"Number of Runtime API requests served.",
 					),
 					&["success"],
@@ -66,7 +66,7 @@ impl metrics::Metrics for Metrics {
 			)?,
 			make_runtime_api_request: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_runtime_api_make_runtime_api_request",
+					"polkadot_parachain_runtime_api_make_runtime_api_request",
 					"Time spent within `runtime_api::make_runtime_api_request`",
 				))?,
 				registry,

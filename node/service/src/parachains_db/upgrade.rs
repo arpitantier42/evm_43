@@ -1,12 +1,12 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
@@ -362,7 +362,7 @@ mod tests {
 	fn test_rocksdb_migrate_1_to_2() {
 		use kvdb::{DBKey, DBOp};
 		use kvdb_rocksdb::{Database, DatabaseConfig};
-		use vine_node_subsystem_util::database::{
+		use polkadot_node_subsystem_util::database::{
 			kvdb_impl::DbAdapter, DBTransaction, KeyValueDB,
 		};
 

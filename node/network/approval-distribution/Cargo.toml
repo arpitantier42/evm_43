@@ -1,27 +1,28 @@
 [package]
-name = "vine-approval-distribution"
+name = "polkadot-approval-distribution"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-vine-node-primitives = { path = "../../primitives" }
-vine-node-network-protocol = { path = "../protocol" }
-vine-node-subsystem = { path = "../../subsystem" }
-vine-node-subsystem-util = { path = "../../subsystem-util" }
-vine-primitives = { path = "../../../primitives" }
+polkadot-node-metrics = { path = "../../metrics" }
+polkadot-node-network-protocol = { path = "../protocol" }
+polkadot-node-primitives = { path = "../../primitives" }
+polkadot-node-subsystem = { path = "../../subsystem" }
+polkadot-primitives = { path = "../../../primitives" }
+polkadot-node-jaeger = { path = "../../jaeger" }
 rand = "0.8"
 
 futures = "0.3.21"
 gum = { package = "tracing-gum", path = "../../gum" }
 
 [dev-dependencies]
-sp-authority-discovery = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-core = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", features = ["std"] , branch = "mainnet-peer" }
+sp-authority-discovery = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-core = { git = "https://github.com/paritytech/substrate", features = ["std"] , branch = "polkadot-v0.9.43" }
 
-vine-node-subsystem-util = { path = "../../subsystem-util" }
-vine-node-subsystem-test-helpers = { path = "../../subsystem-test-helpers" }
-vine-primitives-test-helpers = { path = "../../../primitives/test-helpers" }
+polkadot-node-subsystem-util = { path = "../../subsystem-util" }
+polkadot-node-subsystem-test-helpers = { path = "../../subsystem-test-helpers" }
+polkadot-primitives-test-helpers = { path = "../../../primitives/test-helpers" }
 
 assert_matches = "1.4.0"
 schnorrkel = { version = "0.9.1", default-features = false }

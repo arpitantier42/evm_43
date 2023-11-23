@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::Assets;
 use sp_std::result::Result;
@@ -67,16 +67,29 @@ impl WeightTrader for Tuple {
 	}
 
 	fn buy_weight(&mut self, weight: Weight, payment: Assets) -> Result<Assets, XcmError> {
+		let mut too_expensive_error_found = false;
 		let mut last_error = None;
 		for_tuples!( #(
 			match Tuple.buy_weight(weight, payment.clone()) {
 				Ok(assets) => return Ok(assets),
-				Err(e) => { last_error = Some(e) }
+				Err(e) => {
+					if let XcmError::TooExpensive = e {
+						too_expensive_error_found = true;
+					}
+					last_error = Some(e)
+				}
 			}
 		)* );
-		let last_error = last_error.unwrap_or(XcmError::TooExpensive);
-		log::trace!(target: "xcm::buy_weight", "last_error: {:?}", last_error);
-		Err(last_error)
+
+		log::trace!(target: "xcm::buy_weight", "last_error: {:?}, too_expensive_error_found: {}", last_error, too_expensive_error_found);
+
+		// if we have multiple traders, and first one returns `TooExpensive` and others fail e.g. `AssetNotFound`
+		// then it is more accurate to return `TooExpensive` then `AssetNotFound`
+		Err(if too_expensive_error_found {
+			XcmError::TooExpensive
+		} else {
+			last_error.unwrap_or(XcmError::TooExpensive)
+		})
 	}
 
 	fn refund_weight(&mut self, weight: Weight) -> Option<MultiAsset> {

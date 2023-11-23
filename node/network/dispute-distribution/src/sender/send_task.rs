@@ -1,24 +1,24 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::{HashMap, HashSet};
 
-use futures::{channel::mpsc, future::RemoteHandle, Future, FutureExt, SinkExt};
+use futures::{future::RemoteHandle, Future, FutureExt};
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	request_response::{
 		outgoing::RequestError,
 		v1::{DisputeRequest, DisputeResponse},
@@ -26,9 +26,9 @@ use vine_node_network_protocol::{
 	},
 	IfDisconnected,
 };
-use vine_node_subsystem::{messages::NetworkBridgeTxMessage, overseer};
-use vine_node_subsystem_util::{metrics, runtime::RuntimeInfo};
-use vine_primitives::v2::{
+use polkadot_node_subsystem::{messages::NetworkBridgeTxMessage, overseer};
+use polkadot_node_subsystem_util::{metrics, nesting_sender::NestingSender, runtime::RuntimeInfo};
+use polkadot_primitives::{
 	AuthorityDiscoveryId, CandidateHash, Hash, SessionIndex, ValidatorIndex,
 };
 
@@ -44,7 +44,7 @@ use crate::{
 /// Keeps track of all the validators that have to be reached for a dispute.
 ///
 /// The unit of work for a `SendTask` is an authority/validator.
-pub struct SendTask {
+pub struct SendTask<M> {
 	/// The request we are supposed to get out to all `parachain` validators of the dispute's session
 	/// and to all current authorities.
 	request: DisputeRequest,
@@ -58,14 +58,14 @@ pub struct SendTask {
 	has_failed_sends: bool,
 
 	/// Sender to be cloned for tasks.
-	tx: mpsc::Sender<TaskFinish>,
+	tx: NestingSender<M, TaskFinish>,
 }
 
 /// Status of a particular vote/statement delivery to a particular validator.
 enum DeliveryStatus {
 	/// Request is still in flight.
 	Pending(RemoteHandle<()>),
-	/// Succeeded - no need to send request to this vine anymore.
+	/// Succeeded - no need to send request to this peer anymore.
 	Succeeded,
 }
 
@@ -82,9 +82,9 @@ pub struct TaskFinish {
 
 #[derive(Debug)]
 pub enum TaskResult {
-	/// Task succeeded in getting the request to its vine.
+	/// Task succeeded in getting the request to its peer.
 	Succeeded,
-	/// Task was not able to get the request out to its vine.
+	/// Task was not able to get the request out to its peer.
 	///
 	/// It should be retried in that case.
 	Failed(RequestError),
@@ -100,17 +100,17 @@ impl TaskResult {
 }
 
 #[overseer::contextbounds(DisputeDistribution, prefix = self::overseer)]
-impl SendTask {
+impl<M: 'static + Send + Sync> SendTask<M> {
 	/// Initiates sending a dispute message to peers.
 	///
 	/// Creation of new `SendTask`s is subject to rate limiting. As each `SendTask` will trigger
-	/// sending a message to each validator, hence for employing a per-vine rate limit, we need to
+	/// sending a message to each validator, hence for employing a per-peer rate limit, we need to
 	/// limit the construction of new `SendTask`s.
 	pub async fn new<Context>(
 		ctx: &mut Context,
 		runtime: &mut RuntimeInfo,
 		active_sessions: &HashMap<SessionIndex, Hash>,
-		tx: mpsc::Sender<TaskFinish>,
+		tx: NestingSender<M, TaskFinish>,
 		request: DisputeRequest,
 		metrics: &Metrics,
 	) -> Result<Self> {
@@ -272,9 +272,9 @@ impl SendTask {
 ///
 /// And spawn tasks for handling the response.
 #[overseer::contextbounds(DisputeDistribution, prefix = self::overseer)]
-async fn send_requests<Context>(
+async fn send_requests<Context, M: 'static + Send + Sync>(
 	ctx: &mut Context,
-	tx: mpsc::Sender<TaskFinish>,
+	tx: NestingSender<M, TaskFinish>,
 	receivers: Vec<AuthorityDiscoveryId>,
 	req: DisputeRequest,
 	metrics: &Metrics,
@@ -307,11 +307,11 @@ async fn send_requests<Context>(
 }
 
 /// Future to be spawned in a task for awaiting a response.
-async fn wait_response_task(
+async fn wait_response_task<M: 'static + Send + Sync>(
 	pending_response: impl Future<Output = OutgoingResult<DisputeResponse>>,
 	candidate_hash: CandidateHash,
 	receiver: AuthorityDiscoveryId,
-	mut tx: mpsc::Sender<TaskFinish>,
+	mut tx: NestingSender<M, TaskFinish>,
 	_timer: Option<metrics::prometheus::prometheus::HistogramTimer>,
 ) {
 	let result = pending_response.await;
@@ -320,7 +320,7 @@ async fn wait_response_task(
 		Ok(DisputeResponse::Confirmed) =>
 			TaskFinish { candidate_hash, receiver, result: TaskResult::Succeeded },
 	};
-	if let Err(err) = tx.feed(msg).await {
+	if let Err(err) = tx.send_message(msg).await {
 		gum::debug!(
 			target: LOG_TARGET,
 			%err,

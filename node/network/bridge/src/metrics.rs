@@ -1,21 +1,21 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::{PeerSet, ProtocolVersion};
-use vine_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_node_metrics::metrics::{self, prometheus};
 
 /// Metrics for the network bridge.
 #[derive(Clone, Default)]
@@ -133,8 +133,8 @@ impl metrics::Metrics for Metrics {
 			peer_count: prometheus::register(
 				prometheus::GaugeVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_peer_count",
-						"The number of peers on a parachain-related vine-set",
+						"polkadot_parachain_peer_count",
+						"The number of peers on a parachain-related peer-set",
 					),
 					&["protocol"]
 				)?,
@@ -143,8 +143,8 @@ impl metrics::Metrics for Metrics {
 			connected_events: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_peer_connect_events_total",
-						"The number of vine connect events on a parachain notifications protocol",
+						"polkadot_parachain_peer_connect_events_total",
+						"The number of peer connect events on a parachain notifications protocol",
 					),
 					&["protocol"]
 				)?,
@@ -153,8 +153,8 @@ impl metrics::Metrics for Metrics {
 			disconnected_events: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_peer_disconnect_events_total",
-						"The number of vine disconnect events on a parachain notifications protocol",
+						"polkadot_parachain_peer_disconnect_events_total",
+						"The number of peer disconnect events on a parachain notifications protocol",
 					),
 					&["protocol"]
 				)?,
@@ -163,8 +163,8 @@ impl metrics::Metrics for Metrics {
 			desired_peer_count: prometheus::register(
 				prometheus::GaugeVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_desired_peer_count",
-						"The number of peers that the local node is expected to connect to on a parachain-related vine-set (either including or not including unresolvable authorities, depending on whether `ConnectToValidators` or `ConnectToValidatorsResolved` was used.)",
+						"polkadot_parachain_desired_peer_count",
+						"The number of peers that the local node is expected to connect to on a parachain-related peer-set (either including or not including unresolvable authorities, depending on whether `ConnectToValidators` or `ConnectToValidatorsResolved` was used.)",
 					),
 					&["protocol"]
 				)?,
@@ -172,7 +172,7 @@ impl metrics::Metrics for Metrics {
 			)?,
 			report_events: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_network_report_events_total",
+					"polkadot_parachain_network_report_events_total",
 					"The amount of reputation changes issued by subsystems",
 				)?,
 				registry,
@@ -180,7 +180,7 @@ impl metrics::Metrics for Metrics {
 			notifications_received: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_notifications_received_total",
+						"polkadot_parachain_notifications_received_total",
 						"The number of notifications received on a parachain protocol",
 					),
 					&["protocol"]
@@ -190,7 +190,7 @@ impl metrics::Metrics for Metrics {
 			notifications_sent: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_notifications_sent_total",
+						"polkadot_parachain_notifications_sent_total",
 						"The number of notifications sent on a parachain protocol",
 					),
 					&["protocol"]
@@ -200,7 +200,7 @@ impl metrics::Metrics for Metrics {
 			bytes_received: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_notification_bytes_received_total",
+						"polkadot_parachain_notification_bytes_received_total",
 						"The number of bytes received on a parachain notification protocol",
 					),
 					&["protocol"]
@@ -210,7 +210,7 @@ impl metrics::Metrics for Metrics {
 			bytes_sent: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_notification_bytes_sent_total",
+						"polkadot_parachain_notification_bytes_sent_total",
 						"The number of bytes sent on a parachain notification protocol",
 					),
 					&["protocol"]

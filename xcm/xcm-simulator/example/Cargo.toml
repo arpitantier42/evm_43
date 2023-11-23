@@ -6,22 +6,41 @@ edition.workspace = true
 version.workspace = true
 
 [dependencies]
-codec = { package = "parity-scale-codec", version = "3.0.0" }
-scale-info = { version = "2.1.2", features = ["derive"] }
+codec = { package = "parity-scale-codec", version = "3.4.0" }
+scale-info = { version = "2.5.0", features = ["derive"] }
+log = { version = "0.4.14", default-features = false }
 
-frame-system = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-frame-support = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-pallet-balances = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-std = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-core = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-runtime = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-io = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+pallet-message-queue = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+pallet-uniques = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-tracing = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 
 xcm = { path = "../../" }
 xcm-simulator = { path = "../" }
 xcm-executor = { path = "../../xcm-executor" }
 xcm-builder = { path = "../../xcm-builder" }
 pallet-xcm = { path = "../../pallet-xcm" }
-vine-core-primitives = { path = "../../../core-primitives" }
-vine-runtime-parachains = { path = "../../../runtime/parachains" }
-vine-parachain = { path = "../../../parachain" }
+polkadot-core-primitives = { path = "../../../core-primitives" }
+polkadot-runtime-parachains = { path = "../../../runtime/parachains" }
+polkadot-parachain = { path = "../../../parachain" }
+
+[features]
+default = []
+runtime-benchmarks = [
+	"frame-system/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"pallet-balances/runtime-benchmarks",
+	"pallet-message-queue/runtime-benchmarks",
+	"pallet-uniques/runtime-benchmarks",
+	"pallet-xcm/runtime-benchmarks",
+	"xcm-builder/runtime-benchmarks",
+	"xcm-executor/runtime-benchmarks",
+	"polkadot-runtime-parachains/runtime-benchmarks",
+	"polkadot-parachain/runtime-benchmarks",
+]

@@ -1,40 +1,42 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
+
+use std::collections::HashMap;
 
 use std::{future::Future, sync::Arc};
 
 use futures::FutureExt;
 
-use vine_node_network_protocol::jaeger;
-use vine_node_primitives::{BlockData, ErasureChunk, PoV};
-use vine_node_subsystem_util::runtime::RuntimeInfo;
-use vine_primitives::v2::{
+use polkadot_node_network_protocol::jaeger;
+use polkadot_node_primitives::{BlockData, ErasureChunk, PoV};
+use polkadot_node_subsystem_util::runtime::RuntimeInfo;
+use polkadot_primitives::{
 	BlockNumber, CoreState, GroupIndex, Hash, Id as ParaId, ScheduledCore, SessionIndex,
 	SessionInfo,
 };
 use sp_core::traits::SpawnNamed;
 
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	messages::{
 		AllMessages, AvailabilityDistributionMessage, AvailabilityStoreMessage, ChainApiMessage,
 		NetworkBridgeTxMessage, RuntimeApiMessage, RuntimeApiRequest,
 	},
 	ActivatedLeaf, ActiveLeavesUpdate, LeafStatus, SpawnGlue,
 };
-use vine_node_subsystem_test_helpers::{
+use polkadot_node_subsystem_test_helpers::{
 	make_subsystem_context, mock::make_ferdie_keystore, TestSubsystemContext,
 	TestSubsystemContextHandle,
 };
@@ -196,7 +198,7 @@ fn check_ancestry_lookup_in_same_session() {
 
 	test_harness(test_state.clone(), |mut ctx| async move {
 		let chain = &test_state.relay_chain;
-
+		let spans: HashMap<Hash, jaeger::PerLeafSpan> = HashMap::new();
 		let block_number = 1;
 		let update = ActiveLeavesUpdate {
 			activated: Some(ActivatedLeaf {
@@ -209,7 +211,7 @@ fn check_ancestry_lookup_in_same_session() {
 		};
 
 		requester
-			.update_fetching_heads(&mut ctx, &mut runtime, update)
+			.update_fetching_heads(&mut ctx, &mut runtime, update, &spans)
 			.await
 			.expect("Leaf processing failed");
 		let fetch_tasks = &requester.fetches;
@@ -229,7 +231,7 @@ fn check_ancestry_lookup_in_same_session() {
 		};
 
 		requester
-			.update_fetching_heads(&mut ctx, &mut runtime, update)
+			.update_fetching_heads(&mut ctx, &mut runtime, update, &spans)
 			.await
 			.expect("Leaf processing failed");
 		let fetch_tasks = &requester.fetches;
@@ -255,7 +257,7 @@ fn check_ancestry_lookup_in_same_session() {
 			deactivated: vec![chain[1], chain[2]].into(),
 		};
 		requester
-			.update_fetching_heads(&mut ctx, &mut runtime, update)
+			.update_fetching_heads(&mut ctx, &mut runtime, update, &spans)
 			.await
 			.expect("Leaf processing failed");
 		let fetch_tasks = &requester.fetches;
@@ -283,7 +285,7 @@ fn check_ancestry_lookup_in_different_sessions() {
 
 	test_harness(test_state.clone(), |mut ctx| async move {
 		let chain = &test_state.relay_chain;
-
+		let spans: HashMap<Hash, jaeger::PerLeafSpan> = HashMap::new();
 		let block_number = 3;
 		let update = ActiveLeavesUpdate {
 			activated: Some(ActivatedLeaf {
@@ -296,7 +298,7 @@ fn check_ancestry_lookup_in_different_sessions() {
 		};
 
 		requester
-			.update_fetching_heads(&mut ctx, &mut runtime, update)
+			.update_fetching_heads(&mut ctx, &mut runtime, update, &spans)
 			.await
 			.expect("Leaf processing failed");
 		let fetch_tasks = &requester.fetches;
@@ -314,7 +316,7 @@ fn check_ancestry_lookup_in_different_sessions() {
 		};
 
 		requester
-			.update_fetching_heads(&mut ctx, &mut runtime, update)
+			.update_fetching_heads(&mut ctx, &mut runtime, update, &spans)
 			.await
 			.expect("Leaf processing failed");
 		let fetch_tasks = &requester.fetches;
@@ -332,7 +334,7 @@ fn check_ancestry_lookup_in_different_sessions() {
 		};
 
 		requester
-			.update_fetching_heads(&mut ctx, &mut runtime, update)
+			.update_fetching_heads(&mut ctx, &mut runtime, update, &spans)
 			.await
 			.expect("Leaf processing failed");
 		let fetch_tasks = &requester.fetches;

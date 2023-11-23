@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! The session info pallet provides information about validator sets
 //! from prior sessions needed for approvals and disputes.
@@ -27,7 +27,7 @@ use frame_support::{
 	pallet_prelude::*,
 	traits::{OneSessionHandler, ValidatorSet, ValidatorSetWithIdentification},
 };
-use primitives::v2::{AssignmentId, AuthorityDiscoveryId, SessionIndex, SessionInfo};
+use primitives::{AssignmentId, AuthorityDiscoveryId, ExecutorParams, SessionIndex, SessionInfo};
 use sp_std::vec::Vec;
 
 pub use pallet::*;
@@ -56,7 +56,6 @@ pub mod pallet {
 	use super::*;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::storage_version(migration::STORAGE_VERSION)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
@@ -102,6 +101,12 @@ pub mod pallet {
 	#[pallet::getter(fn account_keys)]
 	pub(crate) type AccountKeys<T: Config> =
 		StorageMap<_, Identity, SessionIndex, Vec<AccountId<T>>>;
+
+	/// Executor parameter set for a given session index
+	#[pallet::storage]
+	#[pallet::getter(fn session_executor_params)]
+	pub(crate) type SessionExecutorParams<T: Config> =
+		StorageMap<_, Identity, SessionIndex, ExecutorParams>;
 }
 
 /// An abstraction for the authority discovery pallet
@@ -153,6 +158,7 @@ impl<T: Config> Pallet<T> {
 				// Idx will be missing for a few sessions after the runtime upgrade.
 				// But it shouldn'be be a problem.
 				AccountKeys::<T>::remove(&idx);
+				SessionExecutorParams::<T>::remove(&idx);
 			}
 			// update `EarliestStoredSession` based on `config.dispute_period`
 			EarliestStoredSession::<T>::set(new_earliest_stored_session);
@@ -184,6 +190,8 @@ impl<T: Config> Pallet<T> {
 			dispute_period,
 		};
 		Sessions::<T>::insert(&new_session_index, &new_session_info);
+
+		SessionExecutorParams::<T>::insert(&new_session_index, config.executor_params);
 	}
 
 	/// Called by the initializer to initialize the session info pallet.

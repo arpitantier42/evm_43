@@ -2,11 +2,12 @@
 
 # Runs all benchmarks for all pallets, for each of the runtimes specified below
 # Should be run on a reference machine to gain accurate benchmarks
-# current reference machine: ssh://git@github.com/Vine-Inc/vine-substrate.git/pull/5848
+# current reference machine: https://github.com/paritytech/substrate/pull/5848
 
 runtimes=(
-  vine
-
+  polkadot
+  kusama
+  westend
 )
 
 for runtime in "${runtimes[@]}"; do

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 //! Error handling related code and Error/Result definitions.
@@ -20,9 +20,9 @@
 use fatality::Nested;
 
 use gum::CandidateHash;
-use vine_node_network_protocol::{request_response::incoming, PeerId};
-use vine_node_subsystem_util::runtime;
-use vine_primitives::v2::AuthorityDiscoveryId;
+use polkadot_node_network_protocol::{request_response::incoming, PeerId};
+use polkadot_node_subsystem_util::runtime;
+use polkadot_primitives::AuthorityDiscoveryId;
 
 use crate::LOG_TARGET;
 
@@ -40,13 +40,13 @@ pub enum Error {
 	#[error("Sending back response to peers {0:#?} failed.")]
 	SendResponses(Vec<PeerId>),
 
-	#[error("Changing vine's ({0}) reputation failed.")]
+	#[error("Changing peer's ({0}) reputation failed.")]
 	SetPeerReputation(PeerId),
 
-	#[error("Dispute request with invalid signatures, from vine {0}.")]
+	#[error("Dispute request with invalid signatures, from peer {0}.")]
 	InvalidSignature(PeerId),
 
-	#[error("Received votes from vine {0} have been completely redundant.")]
+	#[error("Received votes from peer {0} have been completely redundant.")]
 	RedundantMessage(PeerId),
 
 	#[error("Import of dispute got canceled for candidate {0} - import failed for some reason.")]
@@ -80,11 +80,11 @@ pub fn log_error(result: Result<()>) -> std::result::Result<(), FatalError> {
 			gum::debug!(target: LOG_TARGET, error = ?error);
 			Ok(())
 		},
-		Err(JfyiError::NotAValidator(vine)) => {
+		Err(JfyiError::NotAValidator(peer)) => {
 			gum::debug!(
 				target: LOG_TARGET,
-				?vine,
-				"Dropping message from vine (unknown authority id)"
+				?peer,
+				"Dropping message from peer (unknown authority id)"
 			);
 			Ok(())
 		},

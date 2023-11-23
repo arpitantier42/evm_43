@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Shows a basic usage of the `Overseer`:
 //!   * Spawning subsystems and subsystem child jobs
@@ -24,15 +24,15 @@ use orchestra::async_trait;
 use std::time::Duration;
 
 use ::test_helpers::{dummy_candidate_descriptor, dummy_hash};
-use vine_node_primitives::{BlockData, PoV};
-use vine_node_subsystem_types::messages::CandidateValidationMessage;
-use vine_overseer::{
+use polkadot_node_primitives::{BlockData, PoV};
+use polkadot_node_subsystem_types::messages::CandidateValidationMessage;
+use polkadot_overseer::{
 	self as overseer,
 	dummy::dummy_overseer_builder,
 	gen::{FromOrchestra, SpawnedSubsystem},
 	HeadSupportsParachains, SubsystemError,
 };
-use vine_primitives::v2::{CandidateReceipt, Hash};
+use polkadot_primitives::{CandidateReceipt, Hash, PvfExecTimeoutKind};
 
 struct AlwaysSupportsParachains;
 
@@ -76,7 +76,7 @@ impl Subsystem1 {
 			let msg = CandidateValidationMessage::ValidateFromChainState(
 				candidate_receipt,
 				PoV { block_data: BlockData(Vec::new()) }.into(),
-				Default::default(),
+				PvfExecTimeoutKind::Backing,
 				tx,
 			);
 			ctx.send_message(msg).await;

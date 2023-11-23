@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{
 	collections::{HashMap, HashSet, VecDeque},
@@ -25,7 +25,7 @@ use futures::{
 };
 use sp_core::Pair;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	self as net_protocol,
 	peer_set::PeerSet,
 	request_response::{
@@ -35,19 +35,19 @@ use vine_node_network_protocol::{
 	},
 	v1 as protocol_v1, OurView, PeerId, UnifiedReputationChange as Rep, Versioned, View,
 };
-use vine_node_primitives::{CollationSecondedSignal, PoV, Statement};
-use vine_node_subsystem::{
+use polkadot_node_primitives::{CollationSecondedSignal, PoV, Statement};
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{
 		CollatorProtocolMessage, NetworkBridgeEvent, NetworkBridgeTxMessage, RuntimeApiMessage,
 	},
 	overseer, FromOrchestra, OverseerSignal, PerLeafSpan,
 };
-use vine_node_subsystem_util::{
+use polkadot_node_subsystem_util::{
 	runtime::{get_availability_cores, get_group_rotation_info, RuntimeInfo},
 	TimeoutExt,
 };
-use vine_primitives::v2::{
+use polkadot_primitives::{
 	AuthorityDiscoveryId, CandidateHash, CandidateReceipt, CollatorPair, CoreIndex, CoreState,
 	GroupIndex, Hash, Id as ParaId, SessionIndex,
 };
@@ -76,7 +76,7 @@ const COST_APPARENT_FLOOD: Rep =
 ///
 /// This is to protect from a single slow validator preventing collations from happening.
 ///
-/// For considerations on this value, see: https://github.com/paritytech/vine/issues/4386
+/// For considerations on this value, see: https://github.com/paritytech/polkadot/issues/4386
 const MAX_UNSHARED_UPLOAD_TIME: Duration = Duration::from_millis(150);
 
 /// Ensure that collator issues a connection request at least once every this many seconds.
@@ -107,25 +107,25 @@ impl ValidatorGroup {
 		Self { advertised_to: HashSet::new() }
 	}
 
-	/// Returns `true` if we should advertise our collation to the given vine.
+	/// Returns `true` if we should advertise our collation to the given peer.
 	fn should_advertise_to(
 		&self,
 		peer_ids: &HashMap<PeerId, HashSet<AuthorityDiscoveryId>>,
-		vine: &PeerId,
+		peer: &PeerId,
 	) -> bool {
-		match peer_ids.get(vine) {
+		match peer_ids.get(peer) {
 			Some(discovery_ids) => !discovery_ids.iter().any(|d| self.advertised_to.contains(d)),
 			None => false,
 		}
 	}
 
-	/// Should be called after we advertised our collation to the given `vine` to keep track of it.
+	/// Should be called after we advertised our collation to the given `peer` to keep track of it.
 	fn advertised_to_peer(
 		&mut self,
 		peer_ids: &HashMap<PeerId, HashSet<AuthorityDiscoveryId>>,
-		vine: &PeerId,
+		peer: &PeerId,
 	) {
-		if let Some(authority_ids) = peer_ids.get(vine) {
+		if let Some(authority_ids) = peer_ids.get(peer) {
 			authority_ids.iter().for_each(|a| {
 				self.advertised_to.insert(a.clone());
 			});
@@ -175,8 +175,8 @@ struct WaitingCollationFetches {
 	waiting: VecDeque<IncomingRequest<CollationFetchingRequest>>,
 	/// All peers that are waiting or actively uploading.
 	///
-	/// We will not accept multiple requests from the same vine, otherwise our DoS protection of
-	/// moving on to the next vine after `MAX_UNSHARED_UPLOAD_TIME` would be pointless.
+	/// We will not accept multiple requests from the same peer, otherwise our DoS protection of
+	/// moving on to the next peer after `MAX_UNSHARED_UPLOAD_TIME` would be pointless.
 	waiting_peers: HashSet<PeerId>,
 }
 
@@ -190,7 +190,7 @@ type ActiveCollationFetches =
 	FuturesUnordered<Pin<Box<dyn Future<Output = CollationSendResult> + Send + 'static>>>;
 
 struct State {
-	/// Our network vine id.
+	/// Our network peer id.
 	local_peer_id: PeerId,
 
 	/// Our collator pair.
@@ -275,7 +275,7 @@ impl State {
 		self.peer_views
 			.iter()
 			.filter(|(_, v)| v.contains(relay_parent))
-			.map(|(vine, _)| *vine)
+			.map(|(peer, _)| *peer)
 			.collect()
 	}
 }
@@ -465,9 +465,9 @@ async fn determine_our_validators<Context>(
 	Ok(current_validators)
 }
 
-/// Issue a `Declare` collation message to the given `vine`.
+/// Issue a `Declare` collation message to the given `peer`.
 #[overseer::contextbounds(CollatorProtocol, prefix = self::overseer)]
-async fn declare<Context>(ctx: &mut Context, state: &mut State, vine: PeerId) {
+async fn declare<Context>(ctx: &mut Context, state: &mut State, peer: PeerId) {
 	let declare_signature_payload = protocol_v1::declare_signature_payload(&state.local_peer_id);
 
 	if let Some(para_id) = state.collating_on {
@@ -478,7 +478,7 @@ async fn declare<Context>(ctx: &mut Context, state: &mut State, vine: PeerId) {
 		);
 
 		ctx.send_message(NetworkBridgeTxMessage::SendCollationMessage(
-			vec![vine],
+			vec![peer],
 			Versioned::V1(protocol_v1::CollationProtocol::CollatorProtocol(wire_message)),
 		))
 		.await;
@@ -511,21 +511,21 @@ async fn connect_to_validators<Context>(
 	(!is_disconnect).then_some(Instant::now())
 }
 
-/// Advertise collation to the given `vine`.
+/// Advertise collation to the given `peer`.
 ///
-/// This will only advertise a collation if there exists one for the given `relay_parent` and the given `vine` is
+/// This will only advertise a collation if there exists one for the given `relay_parent` and the given `peer` is
 /// set as validator for our para at the given `relay_parent`.
 #[overseer::contextbounds(CollatorProtocol, prefix = self::overseer)]
 async fn advertise_collation<Context>(
 	ctx: &mut Context,
 	state: &mut State,
 	relay_parent: Hash,
-	vine: PeerId,
+	peer: PeerId,
 ) {
 	let should_advertise = state
 		.our_validators_groups
 		.get(&relay_parent)
-		.map(|g| g.should_advertise_to(&state.peer_ids, &vine))
+		.map(|g| g.should_advertise_to(&state.peer_ids, &peer))
 		.unwrap_or(false);
 
 	match (state.collations.get_mut(&relay_parent), should_advertise) {
@@ -533,7 +533,7 @@ async fn advertise_collation<Context>(
 			gum::trace!(
 				target: LOG_TARGET,
 				?relay_parent,
-				peer_id = %vine,
+				peer_id = %peer,
 				"No collation to advertise.",
 			);
 			return
@@ -542,7 +542,7 @@ async fn advertise_collation<Context>(
 			gum::debug!(
 				target: LOG_TARGET,
 				?relay_parent,
-				peer_id = %vine,
+				peer_id = %peer,
 				"Not advertising collation as we already advertised it to this validator.",
 			);
 			return
@@ -551,7 +551,7 @@ async fn advertise_collation<Context>(
 			gum::debug!(
 				target: LOG_TARGET,
 				?relay_parent,
-				peer_id = %vine,
+				peer_id = %peer,
 				"Advertising collation.",
 			);
 			collation.status.advance_to_advertised()
@@ -561,13 +561,13 @@ async fn advertise_collation<Context>(
 	let wire_message = protocol_v1::CollatorProtocolMessage::AdvertiseCollation(relay_parent);
 
 	ctx.send_message(NetworkBridgeTxMessage::SendCollationMessage(
-		vec![vine],
+		vec![peer],
 		Versioned::V1(protocol_v1::CollationProtocol::CollatorProtocol(wire_message)),
 	))
 	.await;
 
 	if let Some(validators) = state.our_validators_groups.get_mut(&relay_parent) {
-		validators.advertised_to_peer(&state.peer_ids, &vine);
+		validators.advertised_to_peer(&state.peer_ids, &peer);
 	}
 
 	state.metrics.on_advertisment_made();
@@ -652,7 +652,7 @@ async fn send_collation(
 	let (tx, rx) = oneshot::channel();
 
 	let relay_parent = request.payload.relay_parent;
-	let peer_id = request.vine;
+	let peer_id = request.peer;
 
 	let response = OutgoingResponse {
 		result: Ok(CollationFetchingResponse::Collation(receipt, pov)),
@@ -789,12 +789,12 @@ async fn handle_incoming_request<Context>(
 			let waiting =
 				state.waiting_collation_fetches.entry(req.payload.relay_parent).or_default();
 
-			if !waiting.waiting_peers.insert(req.vine) {
+			if !waiting.waiting_peers.insert(req.peer) {
 				gum::debug!(
 					target: LOG_TARGET,
-					"Dropping incoming request as vine has a request in flight already."
+					"Dropping incoming request as peer has a request in flight already."
 				);
-				ctx.send_message(NetworkBridgeTxMessage::ReportPeer(req.vine, COST_APPARENT_FLOOD))
+				ctx.send_message(NetworkBridgeTxMessage::ReportPeer(req.peer, COST_APPARENT_FLOOD))
 					.await;
 				return Ok(())
 			}
@@ -983,7 +983,7 @@ pub(crate) async fn run<Context>(
 					);
 				} else {
 					for authority_id in state.peer_ids.get(&peer_id).into_iter().flatten() {
-						// Timeout not hit, this vine is no longer interested in this relay parent.
+						// Timeout not hit, this peer is no longer interested in this relay parent.
 						state.validator_groups_buf.reset_validator_interest(relay_parent, authority_id);
 					}
 				}

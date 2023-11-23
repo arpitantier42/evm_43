@@ -202,7 +202,7 @@ the dispute-coordinator already knows about the dispute.
 
 Goal 3 and 4 are obviously very related and both can easily be solved via rate
 limiting as we shall see below. Rate limits should already be implemented at the
-substrate level, but [are not](ssh://git@github.com/Vine-Inc/vine-substrate.git/issues/7750)
+substrate level, but [are not](https://github.com/paritytech/substrate/issues/7750)
 at the time of writing. But even if they were, the enforced substrate limits would
 likely not be configurable and thus would still be to high for our needs as we can
 rely on the following observations:
@@ -222,7 +222,7 @@ discuss that honest behaviour further:
 What about session changes? Here we might have to inform a new validator set of
 lots of already existing disputes at once.
 
-With observation 1) and a rate limit that is per vine, we are still good:
+With observation 1) and a rate limit that is per peer, we are still good:
 
 Let's assume a rate limit of one message per 200ms per sender. This means 5
 messages from each validator per second. 5 messages means 5 disputes!
@@ -246,7 +246,7 @@ This is probably an argument for not imposing a too low rate limit, although the
 issue is more general: Even without any rate limit, if an attacker generates
 disputes at a very high rate, nodes will be having trouble keeping participation
 up, hence the problem should be mitigated at a [more fundamental
-layer](https://github.com/paritytech/vine/issues/5898).
+layer](https://github.com/paritytech/polkadot/issues/5898).
 
 For nodes that have been offline for a while, the same argument as for session
 changes holds, but matters even less: We assume 2/3 of nodes to be online, so
@@ -260,12 +260,12 @@ from malicious actors trying to overwhelm the system in order to get away withou
 a slash, when it comes to dispute-distribution. In this section we will explain
 how in greater detail.
 
-The idea is to open a queue with limited size for each vine. We will process
+The idea is to open a queue with limited size for each peer. We will process
 incoming messages as fast as we can by doing the following:
 
-1. Check that the sending vine is actually a valid authority - otherwise drop
+1. Check that the sending peer is actually a valid authority - otherwise drop
    message and decrease reputation/disconnect.
-2. Put message on the vine's queue, if queue is full - drop it.
+2. Put message on the peer's queue, if queue is full - drop it.
 
 Every `RATE_LIMIT` seconds (or rather milliseconds), we pause processing
 incoming requests to go a full circle and process one message from each queue.
@@ -334,16 +334,13 @@ for simplicity.
 Instead of filling batches to maximize memory usage, attackers could also try to
 overwhelm the dispute coordinator by only sending votes for new candidates all
 the time. This attack vector is mitigated also by above rate limit and
-decreasing the vine's reputation on denial of the invalid imports by the
+decreasing the peer's reputation on denial of the invalid imports by the
 coordinator.
 
 ### Node Startup
 
-On startup we need to check with the dispute coordinator for any ongoing
-disputes and assume we have not yet sent our statement for those. In case we
-find an explicit statement from ourselves via
-`DisputeCoordinatorMessage::QueryCandidateVotes` we will pretend to just have
-received a `SendDispute` message for that candidate.
+Nothing special happens on node startup. We expect the `dispute-coordinator` to
+inform us about any ongoing disputes via `SendDispute` messages.
 
 ## Backing and Approval Votes
 
@@ -387,7 +384,7 @@ The receiver of a `IHaveVotesRequest` message will do the following:
    those votes.
 2. Check whether the sender knows about any votes, we don't know about and if so
    send a `IHaveVotesRequest` request back, with our knowledge.
-3. Record the vine's knowledge.
+3. Record the peer's knowledge.
 
 When to send `IHaveVotesRequest` messages:
 

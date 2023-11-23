@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! A malicious node that stores bogus availability chunks, preventing others from
 //! doing approval voting. This should lead to disputes depending if the validator
@@ -22,7 +22,7 @@
 
 #![allow(missing_docs)]
 
-use vine_cli::{
+use polkadot_cli::{
 	prepared_overseer_builder,
 	service::{
 		AuthorityDiscoveryApi, AuxStore, BabeApi, Block, Error, HeaderBackend, Overseer,
@@ -31,11 +31,11 @@ use vine_cli::{
 	},
 	Cli,
 };
-use vine_node_core_candidate_validation::find_validation_data;
-use vine_node_primitives::{AvailableData, BlockData, PoV};
-use vine_primitives::v2::CandidateDescriptor;
+use polkadot_node_core_candidate_validation::find_validation_data;
+use polkadot_node_primitives::{AvailableData, BlockData, PoV};
+use polkadot_primitives::{CandidateDescriptor, CandidateReceipt};
 
-use vine_node_subsystem_util::request_validators;
+use polkadot_node_subsystem_util::request_validators;
 use sp_core::traits::SpawnNamed;
 
 use rand::distributions::{Bernoulli, Distribution};
@@ -52,8 +52,7 @@ use crate::{
 
 // Import extra types relevant to the particular
 // subsystem.
-use vine_node_subsystem::{messages::CandidateBackingMessage, SpawnGlue};
-use vine_primitives::v2::CandidateReceipt;
+use polkadot_node_subsystem::{messages::CandidateBackingMessage, SpawnGlue};
 
 use std::sync::Arc;
 
@@ -123,17 +122,22 @@ where
 							{
 								Ok(Some((validation_data, validation_code))) => {
 									sender
-										.send((validation_data, validation_code, n_validators))
+										.send(Some((
+											validation_data,
+											validation_code,
+											n_validators,
+										)))
 										.expect("channel is still open");
 								},
 								_ => {
-									panic!("Unable to fetch validation data");
+									sender.send(None).expect("channel is still open");
 								},
 							}
 						}),
 					);
 
-					let (validation_data, validation_code, n_validators) = receiver.recv().unwrap();
+					let (validation_data, validation_code, n_validators) =
+						receiver.recv().unwrap()?;
 
 					let validation_data_hash = validation_data.hash();
 					let validation_code_hash = validation_code.hash();
@@ -166,11 +170,11 @@ where
 					};
 
 					let (collator_id, collator_signature) = {
-						use vine_primitives::v2::CollatorPair;
+						use polkadot_primitives::CollatorPair;
 						use sp_core::crypto::Pair;
 
 						let collator_pair = CollatorPair::generate().0;
-						let signature_payload = vine_primitives::v2::collator_signature_payload(
+						let signature_payload = polkadot_primitives::collator_signature_payload(
 							&relay_parent,
 							&candidate.descriptor().para_id,
 							&validation_data_hash,

@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use always_assert::never;
 use futures::{
@@ -30,9 +30,9 @@ use std::{
 	time::{Duration, Instant},
 };
 
-use sp_keystore::SyncCryptoStorePtr;
+use sp_keystore::KeystorePtr;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	self as net_protocol,
 	peer_set::PeerSet,
 	request_response as req_res,
@@ -43,8 +43,8 @@ use vine_node_network_protocol::{
 	},
 	v1 as protocol_v1, OurView, PeerId, UnifiedReputationChange as Rep, Versioned, View,
 };
-use vine_node_primitives::{PoV, SignedFullStatement};
-use vine_node_subsystem::{
+use polkadot_node_primitives::{PoV, SignedFullStatement};
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{
 		CandidateBackingMessage, CollatorProtocolMessage, IfDisconnected, NetworkBridgeEvent,
@@ -52,8 +52,8 @@ use vine_node_subsystem::{
 	},
 	overseer, FromOrchestra, OverseerSignal, PerLeafSpan, SubsystemSender,
 };
-use vine_node_subsystem_util::metrics::{self, prometheus};
-use vine_primitives::v2::{CandidateReceipt, CollatorId, Hash, Id as ParaId};
+use polkadot_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_primitives::{CandidateReceipt, CollatorId, Hash, Id as ParaId};
 
 use crate::error::Result;
 
@@ -79,7 +79,7 @@ const BENEFIT_NOTIFY_GOOD: Rep =
 ///
 /// This is to protect from a single slow collator preventing collations from happening.
 ///
-/// With a collation size of 5MB and bandwidth of 500Mbit/s (requirement for  validators),
+/// With a collation size of 5MB and bandwidth of 500Mbit/s (requirement for Kusama validators),
 /// the transfer should be possible within 0.1 seconds. 400 milliseconds should therefore be
 /// plenty, even with multiple heads and should be low enough for later collators to still be able
 /// to finish on time.
@@ -100,7 +100,7 @@ const ACTIVITY_POLL: Duration = Duration::from_millis(10);
 
 // How often to poll collation responses.
 // This is a hack that should be removed in a refactoring.
-// See https://github.com/paritytech/vine/issues/4182
+// See https://github.com/paritytech/polkadot/issues/4182
 const CHECK_COLLATIONS_POLL: Duration = Duration::from_millis(50);
 
 #[derive(Clone, Default)]
@@ -162,7 +162,7 @@ impl metrics::Metrics for Metrics {
 			collation_requests: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_collation_requests_total",
+						"polkadot_parachain_collation_requests_total",
 						"Number of collations requested from Collators.",
 					),
 					&["success"],
@@ -172,7 +172,7 @@ impl metrics::Metrics for Metrics {
 			process_msg: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_collator_protocol_validator_process_msg",
+						"polkadot_parachain_collator_protocol_validator_process_msg",
 						"Time spent within `collator_protocol_validator::process_msg`",
 					)
 				)?,
@@ -181,7 +181,7 @@ impl metrics::Metrics for Metrics {
 			handle_collation_request_result: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_collator_protocol_validator_handle_collation_request_result",
+						"polkadot_parachain_collator_protocol_validator_handle_collation_request_result",
 						"Time spent within `collator_protocol_validator::handle_collation_request_result`",
 					)
 				)?,
@@ -189,7 +189,7 @@ impl metrics::Metrics for Metrics {
 			)?,
 			collator_peer_count: prometheus::register(
 				prometheus::Gauge::new(
-					"vine_parachain_collator_peer_count",
+					"polkadot_parachain_collator_peer_count",
 					"Amount of collator peers connected",
 				)?,
 				registry,
@@ -197,7 +197,7 @@ impl metrics::Metrics for Metrics {
 			collation_request_duration: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_collator_protocol_validator_collation_request_duration",
+						"polkadot_parachain_collator_protocol_validator_collation_request_duration",
 						"Lifetime of the `PerRequest` structure",
 					).buckets(vec![0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.9, 1.0, 1.2, 1.5, 1.75]),
 				)?,
@@ -231,7 +231,7 @@ struct CollatingPeerState {
 
 #[derive(Debug)]
 enum PeerState {
-	// The vine has connected at the given instant.
+	// The peer has connected at the given instant.
 	Connected(Instant),
 	// Peer is collating.
 	Collating(CollatingPeerState),
@@ -274,7 +274,7 @@ impl PeerData {
 	}
 
 	/// Note an advertisement by the collator. Returns `true` if the advertisement was imported
-	/// successfully. Fails if the advertisement is duplicate, out of view, or the vine has not
+	/// successfully. Fails if the advertisement is duplicate, out of view, or the peer has not
 	/// declared itself a collator.
 	fn insert_advertisement(
 		&mut self,
@@ -294,7 +294,7 @@ impl PeerData {
 		}
 	}
 
-	/// Whether a vine is collating.
+	/// Whether a peer is collating.
 	fn is_collating(&self) -> bool {
 		match self.state {
 			PeerState::Connected(_) => false,
@@ -302,7 +302,7 @@ impl PeerData {
 		}
 	}
 
-	/// Note that a vine is now collating with the given collator and para ids.
+	/// Note that a peer is now collating with the given collator and para ids.
 	///
 	/// This will overwrite any previous call to `set_collating` and should only be called
 	/// if `is_collating` is false.
@@ -329,7 +329,7 @@ impl PeerData {
 		}
 	}
 
-	/// Whether the vine has advertised the given collation.
+	/// Whether the peer has advertised the given collation.
 	fn has_advertised(&self, relay_parent: &Hash) -> bool {
 		match self.state {
 			PeerState::Connected(_) => false,
@@ -337,7 +337,7 @@ impl PeerData {
 		}
 	}
 
-	/// Whether the vine is now inactive according to the current instant and the eviction policy.
+	/// Whether the peer is now inactive according to the current instant and the eviction policy.
 	fn is_inactive(&self, policy: &crate::CollatorEvictionPolicy) -> bool {
 		match self.state {
 			PeerState::Connected(connected_at) => connected_at.elapsed() >= policy.undeclared,
@@ -367,23 +367,23 @@ impl ActiveParas {
 	async fn assign_incoming(
 		&mut self,
 		sender: &mut impl SubsystemSender<RuntimeApiMessage>,
-		keystore: &SyncCryptoStorePtr,
+		keystore: &KeystorePtr,
 		new_relay_parents: impl IntoIterator<Item = Hash>,
 	) {
 		for relay_parent in new_relay_parents {
-			let mv = vine_node_subsystem_util::request_validators(relay_parent, sender)
+			let mv = polkadot_node_subsystem_util::request_validators(relay_parent, sender)
 				.await
 				.await
 				.ok()
 				.and_then(|x| x.ok());
 
-			let mg = vine_node_subsystem_util::request_validator_groups(relay_parent, sender)
+			let mg = polkadot_node_subsystem_util::request_validator_groups(relay_parent, sender)
 				.await
 				.await
 				.ok()
 				.and_then(|x| x.ok());
 
-			let mc = vine_node_subsystem_util::request_availability_cores(relay_parent, sender)
+			let mc = polkadot_node_subsystem_util::request_availability_cores(relay_parent, sender)
 				.await
 				.await
 				.ok()
@@ -403,10 +403,9 @@ impl ActiveParas {
 			};
 
 			let para_now =
-				match vine_node_subsystem_util::signing_key_and_index(&validators, keystore)
-					.await
+				match polkadot_node_subsystem_util::signing_key_and_index(&validators, keystore)
 					.and_then(|(_, index)| {
-						vine_node_subsystem_util::find_validator_group(&groups, index)
+						polkadot_node_subsystem_util::find_validator_group(&groups, index)
 					}) {
 					Some(group) => {
 						let core_now = rotation_info.core_for_group(group, cores.len());
@@ -623,7 +622,7 @@ fn collator_peer_id(
 ) -> Option<PeerId> {
 	peer_data
 		.iter()
-		.find_map(|(vine, data)| data.collator_id().filter(|c| c == &collator_id).map(|_| *vine))
+		.find_map(|(peer, data)| data.collator_id().filter(|c| c == &collator_id).map(|_| *peer))
 }
 
 async fn disconnect_peer(sender: &mut impl overseer::CollatorProtocolSenderTrait, peer_id: PeerId) {
@@ -658,7 +657,7 @@ async fn fetch_collation(
 				?peer_id,
 				?para_id,
 				?relay_parent,
-				"Collation is not advertised for the relay parent by the vine, do not request it",
+				"Collation is not advertised for the relay parent by the peer, do not request it",
 			);
 		}
 	} else {
@@ -667,7 +666,7 @@ async fn fetch_collation(
 			?peer_id,
 			?para_id,
 			?relay_parent,
-			"Requested to fetch a collation from an unknown vine",
+			"Requested to fetch a collation from an unknown peer",
 		);
 	}
 
@@ -715,9 +714,9 @@ async fn notify_collation_seconded(
 	modify_reputation(sender, peer_id, BENEFIT_NOTIFY_GOOD).await;
 }
 
-/// A vine's view has changed. A number of things should be done:
+/// A peer's view has changed. A number of things should be done:
 ///  - Ongoing collation requests have to be canceled.
-///  - Advertisements by this vine that are no longer relevant have to be removed.
+///  - Advertisements by this peer that are no longer relevant have to be removed.
 async fn handle_peer_view_change(state: &mut State, peer_id: PeerId, view: View) -> Result<()> {
 	let peer_data = state.peer_data.entry(peer_id).or_default();
 
@@ -825,7 +824,7 @@ async fn process_incoming_peer_message<Context>(
 						target: LOG_TARGET,
 						peer_id = ?origin,
 						?para_id,
-						"Unknown vine",
+						"Unknown peer",
 					);
 					modify_reputation(ctx.sender(), origin, COST_UNEXPECTED_MESSAGE).await;
 					return
@@ -901,7 +900,7 @@ async fn process_incoming_peer_message<Context>(
 						target: LOG_TARGET,
 						peer_id = ?origin,
 						?relay_parent,
-						"Advertise collation message has been received from an unknown vine",
+						"Advertise collation message has been received from an unknown peer",
 					);
 					modify_reputation(ctx.sender(), origin, COST_UNEXPECTED_MESSAGE).await;
 					return
@@ -993,7 +992,7 @@ async fn remove_relay_parent(state: &mut State, relay_parent: Hash) -> Result<()
 async fn handle_our_view_change<Context>(
 	ctx: &mut Context,
 	state: &mut State,
-	keystore: &SyncCryptoStorePtr,
+	keystore: &KeystorePtr,
 	view: OurView,
 ) -> Result<()> {
 	let old_view = std::mem::replace(&mut state.view, view);
@@ -1026,7 +1025,7 @@ async fn handle_our_view_change<Context>(
 
 		// Disconnect peers who are not relevant to our current or next para.
 		//
-		// If the vine hasn't declared yet, they will be disconnected if they do not
+		// If the peer hasn't declared yet, they will be disconnected if they do not
 		// declare.
 		if let Some(para_id) = peer_data.collating_para() {
 			if !state.active_paras.is_current(&para_id) {
@@ -1034,7 +1033,7 @@ async fn handle_our_view_change<Context>(
 					target: LOG_TARGET,
 					?peer_id,
 					?para_id,
-					"Disconnecting vine on view change (not current parachain id)"
+					"Disconnecting peer on view change (not current parachain id)"
 				);
 				disconnect_peer(ctx.sender(), *peer_id).await;
 			}
@@ -1049,7 +1048,7 @@ async fn handle_our_view_change<Context>(
 async fn handle_network_msg<Context>(
 	ctx: &mut Context,
 	state: &mut State,
-	keystore: &SyncCryptoStorePtr,
+	keystore: &KeystorePtr,
 	bridge_message: NetworkBridgeEvent<net_protocol::CollatorProtocolMessage>,
 ) -> Result<()> {
 	use NetworkBridgeEvent::*;
@@ -1084,7 +1083,7 @@ async fn handle_network_msg<Context>(
 #[overseer::contextbounds(CollatorProtocol, prefix = self::overseer)]
 async fn process_msg<Context>(
 	ctx: &mut Context,
-	keystore: &SyncCryptoStorePtr,
+	keystore: &KeystorePtr,
 	msg: CollatorProtocolMessage,
 	state: &mut State,
 ) {
@@ -1165,7 +1164,7 @@ async fn process_msg<Context>(
 #[overseer::contextbounds(CollatorProtocol, prefix = self::overseer)]
 pub(crate) async fn run<Context>(
 	mut ctx: Context,
-	keystore: SyncCryptoStorePtr,
+	keystore: KeystorePtr,
 	eviction_policy: crate::CollatorEvictionPolicy,
 	metrics: Metrics,
 ) -> std::result::Result<(), crate::error::FatalError> {
@@ -1349,10 +1348,10 @@ async fn disconnect_inactive_peers(
 	eviction_policy: &crate::CollatorEvictionPolicy,
 	peers: &HashMap<PeerId, PeerData>,
 ) {
-	for (vine, peer_data) in peers {
+	for (peer, peer_data) in peers {
 		if peer_data.is_inactive(&eviction_policy) {
-			gum::trace!(target: LOG_TARGET, "Disconnecting inactive vine");
-			disconnect_peer(sender, *vine).await;
+			gum::trace!(target: LOG_TARGET, "Disconnecting inactive peer");
+			disconnect_peer(sender, *peer).await;
 		}
 	}
 }
@@ -1363,7 +1362,7 @@ enum CollationFetchResult {
 	/// The collation was fetched successfully.
 	Success,
 	/// An error occurred when fetching a collation or it was invalid.
-	/// A given reputation change should be applied to the vine.
+	/// A given reputation change should be applied to the peer.
 	Error(Option<Rep>),
 }
 
@@ -1421,7 +1420,7 @@ async fn poll_collation_response(
 					"Request timed out"
 				);
 				// For now we don't want to change reputation on timeout, to mitigate issues like
-				// this: https://github.com/paritytech/vine/issues/4617
+				// this: https://github.com/paritytech/polkadot/issues/4617
 				CollationFetchResult::Error(None)
 			},
 			Err(RequestError::NetworkError(err)) => {

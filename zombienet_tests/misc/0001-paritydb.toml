@@ -8,9 +8,9 @@ bootnode = true
 
 [relaychain]
 default_image = "{{ZOMBIENET_INTEGRATION_TEST_IMAGE}}"
-
-chain_spec_command = "vine build-spec --chain -local"
-default_command = "vine"
+chain = "rococo-local"
+chain_spec_command = "polkadot build-spec --chain rococo-local"
+default_command = "polkadot"
 
 [relaychain.default_resources]
 limits = { memory = "4G", cpu = "2" }
@@ -20,7 +20,7 @@ requests = { memory = "2G", cpu = "1" }
   name = "validator"
   count = 10
   args = ["-lparachain=debug", "--db=paritydb"]
- 
+
 {% for id in range(2000,2010) %}
 [[parachains]]
 id = {{id}}

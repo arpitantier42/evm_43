@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! A [`SelectChain`] implementation designed for relay chains.
 //!
@@ -38,17 +38,17 @@
 use super::{HeaderProvider, HeaderProviderProvider};
 use consensus_common::{Error as ConsensusError, SelectChain};
 use futures::channel::oneshot;
-use vine_node_primitives::MAX_FINALITY_LAG as PRIMITIVES_MAX_FINALITY_LAG;
-use vine_node_subsystem::messages::{
-	ApprovalVotingMessage, ChainSelectionMessage, DisputeCoordinatorMessage,
-	HighestApprovedAncestorBlock,
+use polkadot_node_primitives::MAX_FINALITY_LAG as PRIMITIVES_MAX_FINALITY_LAG;
+use polkadot_node_subsystem::messages::{
+	ApprovalDistributionMessage, ApprovalVotingMessage, ChainSelectionMessage,
+	DisputeCoordinatorMessage, HighestApprovedAncestorBlock,
 };
-use vine_node_subsystem_util::metrics::{self, prometheus};
-use vine_overseer::{AllMessages, Handle};
-use vine_primitives::v2::{
-	Block as peerBlock, BlockNumber, Hash, Header as peerHeader,
-};
+use polkadot_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_overseer::{AllMessages, Handle};
+use polkadot_primitives::{Block as PolkadotBlock, BlockNumber, Hash, Header as PolkadotHeader};
 use std::sync::Arc;
+
+pub use service::SpawnTaskHandle;
 
 /// The maximum amount of unfinalized blocks we are willing to allow due to approval checking
 /// or disputes.
@@ -56,7 +56,7 @@ use std::sync::Arc;
 /// This is a safety net that should be removed at some point in the future.
 // In sync with `MAX_HEADS_LOOK_BACK` in `approval-voting`
 // and `MAX_BATCH_SCRAPE_ANCESTORS` in `dispute-coordinator`.
-const MAX_FINALITY_LAG: vine_primitives::v2::BlockNumber = PRIMITIVES_MAX_FINALITY_LAG;
+const MAX_FINALITY_LAG: polkadot_primitives::BlockNumber = PRIMITIVES_MAX_FINALITY_LAG;
 
 const LOG_TARGET: &str = "parachain::chain-selection";
 
@@ -76,7 +76,7 @@ impl metrics::Metrics for Metrics {
 			approval_checking_finality_lag: prometheus::register(
 				prometheus::Gauge::with_opts(
 					prometheus::Opts::new(
-						"vine_parachain_approval_checking_finality_lag",
+						"polkadot_parachain_approval_checking_finality_lag",
 						"How far behind the head of the chain the Approval Checking protocol wants to vote",
 					)
 				)?,
@@ -85,7 +85,7 @@ impl metrics::Metrics for Metrics {
 			disputes_finality_lag: prometheus::register(
 				prometheus::Gauge::with_opts(
 					prometheus::Opts::new(
-						"vine_parachain_disputes_finality_lag",
+						"polkadot_parachain_disputes_finality_lag",
 						"How far behind the head of the chain the Disputes protocol wants to vote",
 					)
 				)?,
@@ -114,14 +114,14 @@ impl Metrics {
 /// Determines whether the chain is a relay chain
 /// and hence has to take approval votes and disputes
 /// into account.
-enum IsDisputesAwareWithOverseer<B: sc_client_api::Backend<peerBlock>> {
+enum IsDisputesAwareWithOverseer<B: sc_client_api::Backend<PolkadotBlock>> {
 	Yes(SelectRelayChainInner<B, Handle>),
 	No,
 }
 
 impl<B> Clone for IsDisputesAwareWithOverseer<B>
 where
-	B: sc_client_api::Backend<peerBlock>,
+	B: sc_client_api::Backend<PolkadotBlock>,
 	SelectRelayChainInner<B, Handle>: Clone,
 {
 	fn clone(&self) -> Self {
@@ -133,14 +133,14 @@ where
 }
 
 /// A chain-selection implementation which provides safety for relay chains.
-pub struct SelectRelayChain<B: sc_client_api::Backend<peerBlock>> {
-	longest_chain: sc_consensus::LongestChain<B, peerBlock>,
+pub struct SelectRelayChain<B: sc_client_api::Backend<PolkadotBlock>> {
+	longest_chain: sc_consensus::LongestChain<B, PolkadotBlock>,
 	selection: IsDisputesAwareWithOverseer<B>,
 }
 
 impl<B> Clone for SelectRelayChain<B>
 where
-	B: sc_client_api::Backend<peerBlock>,
+	B: sc_client_api::Backend<PolkadotBlock>,
 	SelectRelayChainInner<B, Handle>: Clone,
 {
 	fn clone(&self) -> Self {
@@ -150,7 +150,7 @@ where
 
 impl<B> SelectRelayChain<B>
 where
-	B: sc_client_api::Backend<peerBlock> + 'static,
+	B: sc_client_api::Backend<PolkadotBlock> + 'static,
 {
 	/// Use the plain longest chain algorithm exclusively.
 	pub fn new_longest_chain(backend: Arc<B>) -> Self {
@@ -164,27 +164,35 @@ where
 
 	/// Create a new [`SelectRelayChain`] wrapping the given chain backend
 	/// and a handle to the overseer.
-	pub fn new_with_overseer(backend: Arc<B>, overseer: Handle, metrics: Metrics) -> Self {
+	pub fn new_with_overseer(
+		backend: Arc<B>,
+		overseer: Handle,
+		metrics: Metrics,
+		spawn_handle: Option<SpawnTaskHandle>,
+	) -> Self {
 		gum::debug!(target: LOG_TARGET, "Using dispute aware relay-chain selection algorithm",);
 
 		SelectRelayChain {
 			longest_chain: sc_consensus::LongestChain::new(backend.clone()),
 			selection: IsDisputesAwareWithOverseer::Yes(SelectRelayChainInner::new(
-				backend, overseer, metrics,
+				backend,
+				overseer,
+				metrics,
+				spawn_handle,
 			)),
 		}
 	}
 
 	/// Allow access to the inner chain, for usage during the node setup.
-	pub fn as_longest_chain(&self) -> &sc_consensus::LongestChain<B, peerBlock> {
+	pub fn as_longest_chain(&self) -> &sc_consensus::LongestChain<B, PolkadotBlock> {
 		&self.longest_chain
 	}
 }
 
 #[async_trait::async_trait]
-impl<B> SelectChain<peerBlock> for SelectRelayChain<B>
+impl<B> SelectChain<PolkadotBlock> for SelectRelayChain<B>
 where
-	B: sc_client_api::Backend<peerBlock> + 'static,
+	B: sc_client_api::Backend<PolkadotBlock> + 'static,
 {
 	async fn leaves(&self) -> Result<Vec<Hash>, ConsensusError> {
 		match self.selection {
@@ -193,7 +201,7 @@ where
 		}
 	}
 
-	async fn best_chain(&self) -> Result<peerHeader, ConsensusError> {
+	async fn best_chain(&self) -> Result<PolkadotHeader, ConsensusError> {
 		match self.selection {
 			IsDisputesAwareWithOverseer::Yes(ref selection) => selection.best_chain().await,
 			IsDisputesAwareWithOverseer::No => self.longest_chain.best_chain().await,
@@ -205,19 +213,12 @@ where
 		target_hash: Hash,
 		maybe_max_number: Option<BlockNumber>,
 	) -> Result<Hash, ConsensusError> {
-		let longest_chain_best =
-			self.longest_chain.finality_target(target_hash, maybe_max_number).await?;
-
 		if let IsDisputesAwareWithOverseer::Yes(ref selection) = self.selection {
 			selection
-				.finality_target_with_longest_chain(
-					target_hash,
-					longest_chain_best,
-					maybe_max_number,
-				)
+				.finality_target_with_longest_chain(target_hash, maybe_max_number)
 				.await
 		} else {
-			Ok(longest_chain_best)
+			self.longest_chain.finality_target(target_hash, maybe_max_number).await
 		}
 	}
 }
@@ -228,20 +229,26 @@ pub struct SelectRelayChainInner<B, OH> {
 	backend: Arc<B>,
 	overseer: OH,
 	metrics: Metrics,
+	spawn_handle: Option<SpawnTaskHandle>,
 }
 
 impl<B, OH> SelectRelayChainInner<B, OH>
 where
-	B: HeaderProviderProvider<peerBlock>,
+	B: HeaderProviderProvider<PolkadotBlock>,
 	OH: OverseerHandleT,
 {
 	/// Create a new [`SelectRelayChainInner`] wrapping the given chain backend
 	/// and a handle to the overseer.
-	pub fn new(backend: Arc<B>, overseer: OH, metrics: Metrics) -> Self {
-		SelectRelayChainInner { backend, overseer, metrics }
+	pub fn new(
+		backend: Arc<B>,
+		overseer: OH,
+		metrics: Metrics,
+		spawn_handle: Option<SpawnTaskHandle>,
+	) -> Self {
+		SelectRelayChainInner { backend, overseer, metrics, spawn_handle }
 	}
 
-	fn block_header(&self, hash: Hash) -> Result<peerHeader, ConsensusError> {
+	fn block_header(&self, hash: Hash) -> Result<PolkadotHeader, ConsensusError> {
 		match HeaderProvider::header(self.backend.header_provider(), hash) {
 			Ok(Some(header)) => Ok(header),
 			Ok(None) =>
@@ -268,7 +275,7 @@ where
 
 impl<B, OH> Clone for SelectRelayChainInner<B, OH>
 where
-	B: HeaderProviderProvider<peerBlock> + Send + Sync,
+	B: HeaderProviderProvider<PolkadotBlock> + Send + Sync,
 	OH: OverseerHandleT,
 {
 	fn clone(&self) -> Self {
@@ -276,6 +283,7 @@ where
 			backend: self.backend.clone(),
 			overseer: self.overseer.clone(),
 			metrics: self.metrics.clone(),
+			spawn_handle: self.spawn_handle.clone(),
 		}
 	}
 }
@@ -315,8 +323,8 @@ impl OverseerHandleT for Handle {
 
 impl<B, OH> SelectRelayChainInner<B, OH>
 where
-	B: HeaderProviderProvider<peerBlock>,
-	OH: OverseerHandleT,
+	B: HeaderProviderProvider<PolkadotBlock>,
+	OH: OverseerHandleT + 'static,
 {
 	/// Get all leaves of the chain, i.e. block hashes that are suitable to
 	/// build upon and have no suitable children.
@@ -339,7 +347,7 @@ where
 	}
 
 	/// Among all leaves, pick the one which is the best chain to build upon.
-	async fn best_chain(&self) -> Result<peerHeader, ConsensusError> {
+	async fn best_chain(&self) -> Result<PolkadotHeader, ConsensusError> {
 		// The Chain Selection subsystem is supposed to treat the finalized
 		// block as the best leaf in the case that there are no viable
 		// leaves, so this should not happen in practice.
@@ -366,11 +374,9 @@ where
 	pub(crate) async fn finality_target_with_longest_chain(
 		&self,
 		target_hash: Hash,
-		best_leaf: Hash,
 		maybe_max_number: Option<BlockNumber>,
 	) -> Result<Hash, ConsensusError> {
 		let mut overseer = self.overseer.clone();
-		gum::trace!(target: LOG_TARGET, ?best_leaf, "Longest chain");
 
 		let subchain_head = {
 			let (tx, rx) = oneshot::channel();
@@ -416,7 +422,7 @@ where
 				let subchain_header = self.block_header(subchain_head)?;
 
 				if subchain_header.number <= max {
-					gum::trace!(target: LOG_TARGET, ?best_leaf, "Constrained sub-chain head",);
+					gum::trace!(target: LOG_TARGET, ?subchain_head, "Constrained sub-chain head",);
 					subchain_head
 				} else {
 					let (ancestor_hash, _) =
@@ -465,6 +471,26 @@ where
 
 		let lag = initial_leaf_number.saturating_sub(subchain_number);
 		self.metrics.note_approval_checking_finality_lag(lag);
+
+		// Messages sent to `approval-distrbution` are known to have high `ToF`, we need to spawn a task for sending
+		// the message to not block here and delay finality.
+		if let Some(spawn_handle) = &self.spawn_handle {
+			let mut overseer_handle = self.overseer.clone();
+			let lag_update_task = async move {
+				overseer_handle
+					.send_msg(
+						ApprovalDistributionMessage::ApprovalCheckingLagUpdate(lag),
+						std::any::type_name::<Self>(),
+					)
+					.await;
+			};
+
+			spawn_handle.spawn(
+				"approval-checking-lag-update",
+				Some("relay-chain-selection"),
+				Box::pin(lag_update_task),
+			);
+		}
 
 		let (lag, subchain_head) = {
 			// Prevent sending flawed data to the dispute-coordinator.

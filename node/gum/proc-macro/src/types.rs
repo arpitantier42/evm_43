@@ -1,18 +1,18 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 
@@ -115,7 +115,7 @@ impl ToTokens for ValueWithAliasIdent {
 pub(crate) struct ValueWithFormatMarker {
 	pub marker: FormatMarker,
 	pub ident: Ident,
-	pub vine: Option<Token![.]>,
+	pub dot: Option<Token![.]>,
 	pub inner: Punctuated<syn::Member, Token![.]>,
 }
 
@@ -127,8 +127,8 @@ impl Parse for ValueWithFormatMarker {
 		let mut inner = Punctuated::<syn::Member, Token![.]>::new();
 
 		let lookahead = input.lookahead1();
-		let vine = if lookahead.peek(Token![.]) {
-			let vine = Some(input.parse::<Token![.]>()?);
+		let dot = if lookahead.peek(Token![.]) {
+			let dot = Some(input.parse::<Token![.]>()?);
 
 			loop {
 				let member = input.parse::<syn::Member>()?;
@@ -143,11 +143,11 @@ impl Parse for ValueWithFormatMarker {
 				inner.push_punct(token);
 			}
 
-			vine
+			dot
 		} else {
 			None
 		};
-		Ok(Self { marker, ident, vine, inner })
+		Ok(Self { marker, ident, dot, inner })
 	}
 }
 
@@ -155,10 +155,10 @@ impl ToTokens for ValueWithFormatMarker {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
 		let marker = &self.marker;
 		let ident = &self.ident;
-		let vine = &self.vine;
+		let dot = &self.dot;
 		let inner = &self.inner;
 		tokens.extend(quote! {
-			#marker #ident #vine #inner
+			#marker #ident #dot #inner
 		})
 	}
 }

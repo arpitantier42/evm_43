@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Implements the dispute coordinator subsystem.
 //!
@@ -24,24 +24,31 @@
 //! validation results as well as a sink for votes received by other subsystems. When importing a dispute vote from
 //! another node, this will trigger dispute participation to recover and validate the block.
 
-use std::sync::Arc;
+use std::{num::NonZeroUsize, sync::Arc};
 
 use futures::FutureExt;
 
+use gum::CandidateHash;
 use sc_keystore::LocalKeystore;
 
-use vine_node_primitives::CandidateVotes;
-use vine_node_subsystem::{
-	overseer, ActivatedLeaf, FromOrchestra, OverseerSignal, SpawnedSubsystem, SubsystemError,
+use polkadot_node_primitives::{
+	CandidateVotes, DisputeMessage, DisputeMessageCheckError, SignedDisputeStatement,
+	DISPUTE_WINDOW,
 };
-use vine_node_subsystem_util::{
+use polkadot_node_subsystem::{
+	messages::DisputeDistributionMessage, overseer, ActivatedLeaf, FromOrchestra, OverseerSignal,
+	SpawnedSubsystem, SubsystemError,
+};
+use polkadot_node_subsystem_util::{
 	database::Database,
-	rolling_session_window::{DatabaseParams, RollingSessionWindow},
+	runtime::{Config as RuntimeInfoConfig, RuntimeInfo},
 };
-use vine_primitives::v2::{ScrapedOnChainVotes, ValidatorIndex, ValidatorPair};
+use polkadot_primitives::{
+	DisputeStatement, ScrapedOnChainVotes, SessionIndex, SessionInfo, ValidatorIndex,
+};
 
 use crate::{
-	error::{FatalResult, JfyiError, Result},
+	error::{FatalResult, Result},
 	metrics::Metrics,
 	status::{get_active_with_status, SystemClock},
 };
@@ -50,6 +57,7 @@ use db::v1::DbBackend;
 use fatality::Split;
 
 use self::{
+	import::{CandidateEnvironment, CandidateVoteState},
 	participation::{ParticipationPriority, ParticipationRequest},
 	spam_slots::{SpamSlots, UnconfirmedDisputes},
 };
@@ -60,7 +68,7 @@ pub(crate) mod error;
 
 /// Subsystem after receiving the first active leaf.
 mod initialized;
-use initialized::Initialized;
+use initialized::{InitialData, Initialized};
 
 /// Provider of data scraped from chain.
 ///
@@ -182,7 +190,7 @@ impl DisputeCoordinatorSubsystem {
 		};
 
 		initialized
-			.run(ctx, backend, participations, votes, Some(first_leaf), clock)
+			.run(ctx, backend, Some(InitialData { participations, votes, leaf: first_leaf }), clock)
 			.await
 	}
 
@@ -205,31 +213,32 @@ impl DisputeCoordinatorSubsystem {
 		B: Backend + 'static,
 	{
 		loop {
-			let db_params =
-				DatabaseParams { db: self.store.clone(), db_column: self.config.col_session_data };
+			let first_leaf = match wait_for_first_leaf(ctx).await {
+				Ok(Some(activated_leaf)) => activated_leaf,
+				Ok(None) => continue,
+				Err(e) => {
+					e.split()?.log();
+					continue
+				},
+			};
 
-			let (first_leaf, rolling_session_window) =
-				match get_rolling_session_window(ctx, db_params).await {
-					Ok(Some(update)) => update,
-					Ok(None) => {
-						gum::info!(target: LOG_TARGET, "received `Conclude` signal, exiting");
-						return Ok(None)
-					},
-					Err(e) => {
-						e.split()?.log();
-						continue
-					},
-				};
-
+			// `RuntimeInfo` cache should match `DISPUTE_WINDOW` so that we can
+			// keep all sessions for a dispute window
+			let mut runtime_info = RuntimeInfo::new_with_config(RuntimeInfoConfig {
+				keystore: None,
+				session_cache_lru_size: NonZeroUsize::new(DISPUTE_WINDOW.get() as usize)
+					.expect("DISPUTE_WINDOW can't be 0; qed."),
+			});
 			let mut overlay_db = OverlayedBackend::new(&mut backend);
-			let (participations, votes, spam_slots, ordering_provider) = match self
-				.handle_startup(
-					ctx,
-					first_leaf.clone(),
-					&rolling_session_window,
-					&mut overlay_db,
-					clock,
-				)
+			let (
+				participations,
+				votes,
+				spam_slots,
+				ordering_provider,
+				highest_session_seen,
+				gaps_in_cache,
+			) = match self
+				.handle_startup(ctx, first_leaf.clone(), &mut runtime_info, &mut overlay_db, clock)
 				.await
 			{
 				Ok(v) => v,
@@ -247,7 +256,14 @@ impl DisputeCoordinatorSubsystem {
 				participations,
 				votes,
 				first_leaf,
-				Initialized::new(self, rolling_session_window, spam_slots, ordering_provider),
+				Initialized::new(
+					self,
+					runtime_info,
+					spam_slots,
+					ordering_provider,
+					highest_session_seen,
+					gaps_in_cache,
+				),
 				backend,
 			)))
 		}
@@ -262,7 +278,7 @@ impl DisputeCoordinatorSubsystem {
 		&self,
 		ctx: &mut Context,
 		initial_head: ActivatedLeaf,
-		rolling_session_window: &RollingSessionWindow,
+		runtime_info: &mut RuntimeInfo,
 		overlay_db: &mut OverlayedBackend<'_, impl Backend>,
 		clock: &dyn Clock,
 	) -> Result<(
@@ -270,24 +286,80 @@ impl DisputeCoordinatorSubsystem {
 		Vec<ScrapedOnChainVotes>,
 		SpamSlots,
 		ChainScraper,
+		SessionIndex,
+		bool,
 	)> {
-		// Prune obsolete disputes:
-		db::v1::note_earliest_session(overlay_db, rolling_session_window.earliest_session())?;
+		let now = clock.now();
 
 		let active_disputes = match overlay_db.load_recent_disputes() {
-			Ok(Some(disputes)) =>
-				get_active_with_status(disputes.into_iter(), clock.now()).collect(),
-			Ok(None) => Vec::new(),
+			Ok(disputes) => disputes
+				.map(|disputes| get_active_with_status(disputes.into_iter(), now))
+				.into_iter()
+				.flatten(),
 			Err(e) => {
 				gum::error!(target: LOG_TARGET, "Failed initial load of recent disputes: {:?}", e);
 				return Err(e.into())
 			},
 		};
 
+		// We assume the highest session is the passed leaf. If we can't get the session index
+		// we can't initialize the subsystem so we'll wait for a new leaf
+		let highest_session = runtime_info
+			.get_session_index_for_child(ctx.sender(), initial_head.hash)
+			.await?;
+
+		let mut gap_in_cache = false;
+		// Cache the sessions. A failure to fetch a session here is not that critical so we
+		// won't abort the initialization
+		for idx in highest_session.saturating_sub(DISPUTE_WINDOW.get() - 1)..=highest_session {
+			if let Err(e) = runtime_info
+				.get_session_info_by_index(ctx.sender(), initial_head.hash, idx)
+				.await
+			{
+				gum::debug!(
+					target: LOG_TARGET,
+					leaf_hash = ?initial_head.hash,
+					session_idx = idx,
+					err = ?e,
+					"Can't cache SessionInfo during subsystem initialization. Skipping session."
+				);
+				gap_in_cache = true;
+				continue
+			};
+		}
+
+		// Prune obsolete disputes:
+		db::v1::note_earliest_session(
+			overlay_db,
+			highest_session.saturating_sub(DISPUTE_WINDOW.get() - 1),
+		)?;
+
 		let mut participation_requests = Vec::new();
-		let mut unconfirmed_disputes: UnconfirmedDisputes = UnconfirmedDisputes::new();
+		let mut spam_disputes: UnconfirmedDisputes = UnconfirmedDisputes::new();
+		let leaf_hash = initial_head.hash;
 		let (scraper, votes) = ChainScraper::new(ctx.sender(), initial_head).await?;
-		for ((session, ref candidate_hash), status) in active_disputes {
+		for ((session, ref candidate_hash), _) in active_disputes {
+			let env = match CandidateEnvironment::new(
+				&self.keystore,
+				ctx,
+				runtime_info,
+				highest_session,
+				leaf_hash,
+			)
+			.await
+			{
+				None => {
+					gum::warn!(
+						target: LOG_TARGET,
+						session,
+						"We are lacking a `SessionInfo` for handling db votes on startup."
+					);
+
+					continue
+				},
+				Some(env) => env,
+			};
+
 			let votes: CandidateVotes =
 				match overlay_db.load_candidate_votes(session, candidate_hash) {
 					Ok(Some(votes)) => votes.into(),
@@ -301,79 +373,61 @@ impl DisputeCoordinatorSubsystem {
 						continue
 					},
 				};
+			let vote_state = CandidateVoteState::new(votes, &env, now);
 
-			let validators = match rolling_session_window.session_info(session) {
-				None => {
-					gum::warn!(
+			let potential_spam = is_potential_spam(&scraper, &vote_state, candidate_hash);
+			let is_included =
+				scraper.is_candidate_included(&vote_state.votes().candidate_receipt.hash());
+
+			if potential_spam {
+				gum::trace!(
+					target: LOG_TARGET,
+					?session,
+					?candidate_hash,
+					"Found potential spam dispute on startup"
+				);
+				spam_disputes
+					.insert((session, *candidate_hash), vote_state.votes().voted_indices());
+			} else {
+				// Participate if need be:
+				if vote_state.own_vote_missing() {
+					gum::trace!(
 						target: LOG_TARGET,
-						session,
-						"Missing info for session which has an active dispute",
+						?session,
+						?candidate_hash,
+						"Found valid dispute, with no vote from us on startup - participating."
 					);
-					continue
-				},
-				Some(info) => info.validators.clone(),
-			};
-
-			let voted_indices = votes.voted_indices();
-
-			// Determine if there are any missing local statements for this dispute. Validators are
-			// filtered if:
-			//  1) their statement already exists, or
-			//  2) the validator key is not in the local keystore (i.e. the validator is remote).
-			// The remaining set only contains local validators that are also missing statements.
-			let missing_local_statement = validators
-				.iter()
-				.enumerate()
-				.map(|(index, validator)| (ValidatorIndex(index as _), validator))
-				.any(|(index, validator)| {
-					!voted_indices.contains(&index) &&
-						self.keystore
-							.key_pair::<ValidatorPair>(validator)
-							.ok()
-							.map_or(false, |v| v.is_some())
-				});
-
-			let is_included = scraper.is_candidate_included(&votes.candidate_receipt.hash());
-
-			if !status.is_confirmed_concluded() && !is_included {
-				unconfirmed_disputes.insert((session, *candidate_hash), voted_indices);
-			}
-
-			// Participate for all non-concluded disputes which do not have a
-			// recorded local statement.
-			if missing_local_statement {
-				participation_requests.push((
-					ParticipationPriority::with_priority_if(is_included),
-					ParticipationRequest::new(votes.candidate_receipt.clone(), session),
-				));
+					let request_timer = self.metrics.time_participation_pipeline();
+					participation_requests.push((
+						ParticipationPriority::with_priority_if(is_included),
+						ParticipationRequest::new(
+							vote_state.votes().candidate_receipt.clone(),
+							session,
+							request_timer,
+						),
+					));
+				}
+				// Else make sure our own vote is distributed:
+				else {
+					gum::trace!(
+						target: LOG_TARGET,
+						?session,
+						?candidate_hash,
+						"Found valid dispute, with vote from us on startup - send vote."
+					);
+					send_dispute_messages(ctx, &env, &vote_state).await;
+				}
 			}
 		}
 
 		Ok((
 			participation_requests,
 			votes,
-			SpamSlots::recover_from_state(unconfirmed_disputes),
+			SpamSlots::recover_from_state(spam_disputes),
 			scraper,
+			highest_session,
+			gap_in_cache,
 		))
-	}
-}
-
-/// Wait for `ActiveLeavesUpdate` on startup, returns `None` if `Conclude` signal came first.
-#[overseer::contextbounds(DisputeCoordinator, prefix = self::overseer)]
-async fn get_rolling_session_window<Context>(
-	ctx: &mut Context,
-	db_params: DatabaseParams,
-) -> Result<Option<(ActivatedLeaf, RollingSessionWindow)>> {
-	if let Some(leaf) = { wait_for_first_leaf(ctx) }.await? {
-		let sender = ctx.sender().clone();
-		Ok(Some((
-			leaf.clone(),
-			RollingSessionWindow::new(sender, leaf.hash, db_params)
-				.await
-				.map_err(JfyiError::RollingSessionWindow)?,
-		)))
-	} else {
-		Ok(None)
 	}
 }
 
@@ -406,4 +460,145 @@ async fn wait_for_first_leaf<Context>(ctx: &mut Context) -> Result<Option<Activa
 			},
 		}
 	}
+}
+
+/// Check wheter a dispute for the given candidate could be spam.
+///
+/// That is the candidate could be made up.
+pub fn is_potential_spam<V>(
+	scraper: &ChainScraper,
+	vote_state: &CandidateVoteState<V>,
+	candidate_hash: &CandidateHash,
+) -> bool {
+	let is_disputed = vote_state.is_disputed();
+	let is_included = scraper.is_candidate_included(candidate_hash);
+	let is_backed = scraper.is_candidate_backed(candidate_hash);
+	let is_confirmed = vote_state.is_confirmed();
+
+	is_disputed && !is_included && !is_backed && !is_confirmed
+}
+
+/// Tell dispute-distribution to send all our votes.
+///
+/// Should be called on startup for all active disputes where there are votes from us already.
+#[overseer::contextbounds(DisputeCoordinator, prefix = self::overseer)]
+async fn send_dispute_messages<Context>(
+	ctx: &mut Context,
+	env: &CandidateEnvironment<'_>,
+	vote_state: &CandidateVoteState<CandidateVotes>,
+) {
+	for own_vote in vote_state.own_votes().into_iter().flatten() {
+		let (validator_index, (kind, sig)) = own_vote;
+		let public_key = if let Some(key) = env.session_info().validators.get(*validator_index) {
+			key.clone()
+		} else {
+			gum::error!(
+				target: LOG_TARGET,
+				?validator_index,
+				session_index = ?env.session_index(),
+				"Could not find our own key in `SessionInfo`"
+			);
+			continue
+		};
+		let our_vote_signed = SignedDisputeStatement::new_checked(
+			kind.clone(),
+			vote_state.votes().candidate_receipt.hash(),
+			env.session_index(),
+			public_key,
+			sig.clone(),
+		);
+		let our_vote_signed = match our_vote_signed {
+			Ok(signed) => signed,
+			Err(()) => {
+				gum::error!(
+					target: LOG_TARGET,
+					"Checking our own signature failed - db corruption?"
+				);
+				continue
+			},
+		};
+		let dispute_message = match make_dispute_message(
+			env.session_info(),
+			vote_state.votes(),
+			our_vote_signed,
+			*validator_index,
+		) {
+			Err(err) => {
+				gum::debug!(target: LOG_TARGET, ?err, "Creating dispute message failed.");
+				continue
+			},
+			Ok(dispute_message) => dispute_message,
+		};
+
+		ctx.send_message(DisputeDistributionMessage::SendDispute(dispute_message)).await;
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DisputeMessageCreationError {
+	#[error("There was no opposite vote available")]
+	NoOppositeVote,
+	#[error("Found vote had an invalid validator index that could not be found")]
+	InvalidValidatorIndex,
+	#[error("Statement found in votes had invalid signature.")]
+	InvalidStoredStatement,
+	#[error(transparent)]
+	InvalidStatementCombination(DisputeMessageCheckError),
+}
+
+/// Create a `DisputeMessage` to be sent to `DisputeDistribution`.
+pub fn make_dispute_message(
+	info: &SessionInfo,
+	votes: &CandidateVotes,
+	our_vote: SignedDisputeStatement,
+	our_index: ValidatorIndex,
+) -> std::result::Result<DisputeMessage, DisputeMessageCreationError> {
+	let validators = &info.validators;
+
+	let (valid_statement, valid_index, invalid_statement, invalid_index) =
+		if let DisputeStatement::Valid(_) = our_vote.statement() {
+			let (validator_index, (statement_kind, validator_signature)) =
+				votes.invalid.iter().next().ok_or(DisputeMessageCreationError::NoOppositeVote)?;
+			let other_vote = SignedDisputeStatement::new_checked(
+				DisputeStatement::Invalid(*statement_kind),
+				*our_vote.candidate_hash(),
+				our_vote.session_index(),
+				validators
+					.get(*validator_index)
+					.ok_or(DisputeMessageCreationError::InvalidValidatorIndex)?
+					.clone(),
+				validator_signature.clone(),
+			)
+			.map_err(|()| DisputeMessageCreationError::InvalidStoredStatement)?;
+			(our_vote, our_index, other_vote, *validator_index)
+		} else {
+			let (validator_index, (statement_kind, validator_signature)) = votes
+				.valid
+				.raw()
+				.iter()
+				.next()
+				.ok_or(DisputeMessageCreationError::NoOppositeVote)?;
+			let other_vote = SignedDisputeStatement::new_checked(
+				DisputeStatement::Valid(*statement_kind),
+				*our_vote.candidate_hash(),
+				our_vote.session_index(),
+				validators
+					.get(*validator_index)
+					.ok_or(DisputeMessageCreationError::InvalidValidatorIndex)?
+					.clone(),
+				validator_signature.clone(),
+			)
+			.map_err(|()| DisputeMessageCreationError::InvalidStoredStatement)?;
+			(other_vote, *validator_index, our_vote, our_index)
+		};
+
+	DisputeMessage::from_signed_statements(
+		valid_statement,
+		valid_index,
+		invalid_statement,
+		invalid_index,
+		votes.candidate_receipt.clone(),
+		info,
+	)
+	.map_err(DisputeMessageCreationError::InvalidStatementCombination)
 }

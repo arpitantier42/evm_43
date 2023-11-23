@@ -1,36 +1,47 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-//! The collation generation subsystem is the interface between vine and the collators.
+//! The collation generation subsystem is the interface between polkadot and the collators.
+//!
+//! # Protocol
+//!
+//! On every `ActiveLeavesUpdate`:
+//!
+//! * If there is no collation generation config, ignore.
+//! * Otherwise, for each `activated` head in the update:
+//!   * Determine if the para is scheduled on any core by fetching the `availability_cores` Runtime API.
+//!   * Use the Runtime API subsystem to fetch the full validation data.
+//!   * Invoke the `collator`, and use its outputs to produce a [`CandidateReceipt`], signed with the configuration's `key`.
+//!   * Dispatch a [`CollatorProtocolMessage::DistributeCollation`](receipt, pov)`.
 
 #![deny(missing_docs)]
 
 use futures::{channel::mpsc, future::FutureExt, join, select, sink::SinkExt, stream::StreamExt};
 use parity_scale_codec::Encode;
-use vine_node_primitives::{AvailableData, CollationGenerationConfig, PoV};
-use vine_node_subsystem::{
+use polkadot_node_primitives::{AvailableData, CollationGenerationConfig, PoV};
+use polkadot_node_subsystem::{
 	messages::{CollationGenerationMessage, CollatorProtocolMessage},
 	overseer, ActiveLeavesUpdate, FromOrchestra, OverseerSignal, SpawnedSubsystem,
 	SubsystemContext, SubsystemError, SubsystemResult,
 };
-use vine_node_subsystem_util::{
+use polkadot_node_subsystem_util::{
 	request_availability_cores, request_persisted_validation_data, request_validation_code,
 	request_validation_code_hash, request_validators,
 };
-use vine_primitives::v2::{
+use polkadot_primitives::{
 	collator_signature_payload, CandidateCommitments, CandidateDescriptor, CandidateReceipt,
 	CoreState, Hash, Id as ParaId, OccupiedCoreAssumption, PersistedValidationData,
 	ValidationCodeHash,
@@ -177,7 +188,7 @@ async fn handle_new_activations<Context>(
 	sender: &mpsc::Sender<overseer::CollationGenerationOutgoingMessages>,
 ) -> crate::error::Result<()> {
 	// follow the procedure from the guide:
-	// https://w3f.github.io/parachain-implementers-guide/node/collators/collation-generation.html
+	// https://paritytech.github.io/polkadot/book/node/collators/collation-generation.html
 
 	let _overall_timer = metrics.time_new_activations();
 
@@ -199,7 +210,7 @@ async fn handle_new_activations<Context>(
 				CoreState::Scheduled(scheduled_core) =>
 					(scheduled_core, OccupiedCoreAssumption::Free),
 				CoreState::Occupied(_occupied_core) => {
-					// TODO: https://github.com/paritytech/vine/issues/1573
+					// TODO: https://github.com/paritytech/polkadot/issues/1573
 					gum::trace!(
 						target: LOG_TARGET,
 						core_idx = %core_idx,
@@ -411,7 +422,7 @@ async fn obtain_current_validation_code_hash(
 	assumption: OccupiedCoreAssumption,
 	sender: &mut impl overseer::CollationGenerationSenderTrait,
 ) -> Result<Option<ValidationCodeHash>, crate::error::Error> {
-	use vine_node_subsystem::RuntimeApiError;
+	use polkadot_node_subsystem::RuntimeApiError;
 
 	match request_validation_code_hash(relay_parent, para_id, assumption, sender)
 		.await
@@ -442,6 +453,6 @@ fn erasure_root(
 	let available_data =
 		AvailableData { validation_data: persisted_validation, pov: Arc::new(pov) };
 
-	let chunks = vine_erasure_coding::obtain_chunks_v1(n_validators, &available_data)?;
-	Ok(vine_erasure_coding::branches(&chunks).root())
+	let chunks = polkadot_erasure_coding::obtain_chunks_v1(n_validators, &available_data)?;
+	Ok(polkadot_erasure_coding::branches(&chunks).root())
 }

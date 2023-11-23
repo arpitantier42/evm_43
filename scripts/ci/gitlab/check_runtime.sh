@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Check for any changes in any runtime directories (e.g., ^runtime/vine) as
+# Check for any changes in any runtime directories (e.g., ^runtime/polkadot) as
 # well as directories common to all runtimes (e.g., ^runtime/common). If there
 # are no changes, check if the Substrate git SHA in Cargo.lock has been
 # changed. If so, pull the repo and verify if {spec,impl}_versions have been
@@ -16,7 +16,7 @@ set -e # fail on any error
 #shellcheck source=../common/lib.sh
 . "$(dirname "${0}")/../common/lib.sh"
 
-SUBSTRATE_REPO="ssh://git@github.com/PEER-Inc/peer-substrate.git"
+SUBSTRATE_REPO="https://github.com/paritytech/substrate"
 SUBSTRATE_REPO_CARGO="git\+${SUBSTRATE_REPO}"
 SUBSTRATE_VERSIONS_FILE="bin/node/runtime/src/lib.rs"
 
@@ -35,9 +35,10 @@ git fetch --depth="${GIT_DEPTH:-100}" origin master
 
 
 runtimes=(
-
-  "vine"
-
+  "kusama"
+  "polkadot"
+  "westend"
+  "rococo"
 )
 
 common_dirs=(
@@ -104,7 +105,7 @@ EOT
 
   boldcat <<EOT
 spec_version or or impl_version have changed in substrate after updating Cargo.lock
-please make sure versions are bumped in vine accordingly
+please make sure versions are bumped in polkadot accordingly
 EOT
 
 fi

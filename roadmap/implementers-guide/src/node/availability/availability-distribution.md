@@ -21,8 +21,8 @@ network requests by querying that store.
 
 ## Protocol
 
-This subsystem does not handle any vine set messages, but the `pov_requester`
-does connect to validators of the same backing group on the validation vine
+This subsystem does not handle any peer set messages, but the `pov_requester`
+does connect to validators of the same backing group on the validation peer
 set, to ensure fast propagation of statements between those validators and for
 ensuring already established connections for requesting `PoV`s. Other than that
 this subsystem drives request/response protocols.
@@ -50,7 +50,7 @@ Output:
 
 The PoV requester in the `pov_requester` module takes care of staying connected
 to validators of the current backing group of this very validator on the `Validation`
-vine set and it will handle `FetchPoV` requests by issuing network requests to
+peer set and it will handle `FetchPoV` requests by issuing network requests to
 those validators. It will check the hash of the received `PoV`, but will not do any
 further validation. That needs to be done by the original `FetchPoV` sender
 (backing subsystem).
@@ -76,7 +76,7 @@ backers, not all of them are required to have the needed chunk. This in turn
 could lead to low throughput, as we have to wait for fetches to fail,
 before reaching a validator finally having our chunk. We do rank back validators
 not delivering our chunk, but as backers could vary from block to block on a
-perfectly legitimate basis, this is still not ideal. See issues [2509](https://github.com/paritytech/vine/issues/2509) and [2512](https://github.com/paritytech/vine/issues/2512)
+perfectly legitimate basis, this is still not ideal. See issues [2509](https://github.com/paritytech/polkadot/issues/2509) and [2512](https://github.com/paritytech/polkadot/issues/2512)
 for more information.
 
 The current implementation also only fetches chunks for occupied cores in blocks
@@ -84,7 +84,7 @@ in active leaves. This means though, if active leaves skips a block or we are
 particularly slow in fetching our chunk, we might not fetch our chunk if
 availability reached 2/3 fast enough (slot becomes free). This is not desirable
 as we would like as many validators as possible to have their chunk. See this
-[issue](https://github.com/paritytech/vine/issues/2513) for more details.
+[issue](https://github.com/paritytech/polkadot/issues/2513) for more details.
 
 
 ### Serving

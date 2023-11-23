@@ -1,18 +1,18 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{
 	collections::{hash_map, HashMap},
@@ -21,8 +21,8 @@ use std::{
 
 use futures::future::pending;
 
-use vine_node_network_protocol::request_response::DISPUTE_REQUEST_TIMEOUT;
-use vine_primitives::v2::{CandidateHash, CandidateReceipt};
+use polkadot_node_network_protocol::request_response::DISPUTE_REQUEST_TIMEOUT;
+use polkadot_primitives::{CandidateHash, CandidateReceipt};
 
 use crate::{
 	receiver::batches::{batch::TickResult, waiting_queue::PendingWake},

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! The Statement Distribution Subsystem.
 //!
@@ -25,7 +25,7 @@
 use error::{log_error, FatalResult, JfyiErrorResult};
 use parity_scale_codec::Encode;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	self as net_protocol,
 	grid_topology::{GridNeighbors, RequiredRouting, SessionBoundGridTopologyStorage},
 	peer_set::{IsAuthority, PeerSet},
@@ -33,10 +33,10 @@ use vine_node_network_protocol::{
 	v1::{self as protocol_v1, StatementMetadata},
 	IfDisconnected, PeerId, UnifiedReputationChange as Rep, Versioned, View,
 };
-use vine_node_primitives::{SignedFullStatement, Statement, UncheckedSignedFullStatement};
-use vine_node_subsystem_util::{self as util, rand, MIN_GOSSIP_PEERS};
+use polkadot_node_primitives::{SignedFullStatement, Statement, UncheckedSignedFullStatement};
+use polkadot_node_subsystem_util::{self as util, rand, MIN_GOSSIP_PEERS};
 
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{
 		CandidateBackingMessage, NetworkBridgeEvent, NetworkBridgeTxMessage,
@@ -45,7 +45,7 @@ use vine_node_subsystem::{
 	overseer, ActiveLeavesUpdate, FromOrchestra, OverseerSignal, PerLeafSpan, SpawnedSubsystem,
 	SubsystemError,
 };
-use vine_primitives::v2::{
+use polkadot_primitives::{
 	AuthorityDiscoveryId, CandidateHash, CommittedCandidateReceipt, CompactStatement, Hash,
 	IndexedVec, SignedStatement, SigningContext, UncheckedSignedStatement, ValidatorId,
 	ValidatorIndex, ValidatorSignature,
@@ -57,7 +57,7 @@ use futures::{
 	prelude::*,
 };
 use indexmap::{map::Entry as IEntry, IndexMap};
-use sp_keystore::SyncCryptoStorePtr;
+use sp_keystore::KeystorePtr;
 use util::runtime::RuntimeInfo;
 
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
@@ -91,11 +91,11 @@ const COST_UNEXPECTED_STATEMENT_REMOTE: Rep =
 	Rep::CostMinor("Unexpected Statement, remote not allowed");
 
 const COST_FETCH_FAIL: Rep =
-	Rep::CostMinor("Requesting `CommittedCandidateReceipt` from vine failed");
+	Rep::CostMinor("Requesting `CommittedCandidateReceipt` from peer failed");
 const COST_INVALID_SIGNATURE: Rep = Rep::CostMajor("Invalid Statement Signature");
 const COST_WRONG_HASH: Rep = Rep::CostMajor("Received candidate had wrong hash");
 const COST_DUPLICATE_STATEMENT: Rep =
-	Rep::CostMajorRepeated("Statement sent more than once by vine");
+	Rep::CostMajorRepeated("Statement sent more than once by peer");
 const COST_APPARENT_FLOOD: Rep = Rep::Malicious("Peer appears to be flooding us with statements");
 
 const BENEFIT_VALID_STATEMENT: Rep = Rep::BenefitMajor("Peer provided a valid statement");
@@ -119,7 +119,7 @@ const MAX_LARGE_STATEMENTS_PER_SENDER: usize = 20;
 /// The statement distribution subsystem.
 pub struct StatementDistributionSubsystem<R> {
 	/// Pointer to a keystore, which is required for determining this node's validator index.
-	keystore: SyncCryptoStorePtr,
+	keystore: KeystorePtr,
 	/// Receiver for incoming large statement requests.
 	req_receiver: Option<IncomingRequestReceiver<request_v1::StatementFetchingRequest>>,
 	/// Prometheus metrics
@@ -164,7 +164,7 @@ impl RecentOutdatedHeads {
 	}
 }
 
-/// Tracks our impression of a single vine's view of the candidates a validator has seconded
+/// Tracks our impression of a single peer's view of the candidates a validator has seconded
 /// for a given relay-parent.
 ///
 /// It is expected to receive at most `VC_THRESHOLD` from us and be aware of at most `VC_THRESHOLD`
@@ -192,12 +192,12 @@ impl VcPerPeerTracker {
 	/// Note that the remote should now be aware that a validator has seconded a given candidate (by hash)
 	/// based on a message that it has sent us.
 	///
-	/// Returns `true` if the vine was allowed to send us such a message, `false` otherwise.
+	/// Returns `true` if the peer was allowed to send us such a message, `false` otherwise.
 	fn note_remote(&mut self, h: CandidateHash) -> bool {
 		note_hash(&mut self.remote_observed, h)
 	}
 
-	/// Returns `true` if the vine is allowed to send us such a message, `false` otherwise.
+	/// Returns `true` if the peer is allowed to send us such a message, `false` otherwise.
 	fn is_wanted_candidate(&self, h: &CandidateHash) -> bool {
 		!self.remote_observed.contains(h) && !self.remote_observed.is_full()
 	}
@@ -214,29 +214,29 @@ fn note_hash(
 	observed.try_push(h).is_ok()
 }
 
-/// knowledge that a vine has about goings-on in a relay parent.
+/// knowledge that a peer has about goings-on in a relay parent.
 #[derive(Default)]
 struct PeerRelayParentKnowledge {
-	/// candidates that the vine is aware of because we sent statements to it. This indicates that we can
+	/// candidates that the peer is aware of because we sent statements to it. This indicates that we can
 	/// send other statements pertaining to that candidate.
 	sent_candidates: HashSet<CandidateHash>,
-	/// candidates that vine is aware of, because we received statements from it.
+	/// candidates that peer is aware of, because we received statements from it.
 	received_candidates: HashSet<CandidateHash>,
-	/// fingerprints of all statements a vine should be aware of: those that
-	/// were sent to the vine by us.
+	/// fingerprints of all statements a peer should be aware of: those that
+	/// were sent to the peer by us.
 	sent_statements: HashSet<(CompactStatement, ValidatorIndex)>,
-	/// fingerprints of all statements a vine should be aware of: those that
-	/// were sent to us by the vine.
+	/// fingerprints of all statements a peer should be aware of: those that
+	/// were sent to us by the peer.
 	received_statements: HashSet<(CompactStatement, ValidatorIndex)>,
-	/// How many candidates this vine is aware of for each given validator index.
+	/// How many candidates this peer is aware of for each given validator index.
 	seconded_counts: HashMap<ValidatorIndex, VcPerPeerTracker>,
 	/// How many statements we've received for each candidate that we're aware of.
 	received_message_count: HashMap<CandidateHash, usize>,
 
-	/// How many large statements this vine already sent us.
+	/// How many large statements this peer already sent us.
 	///
 	/// Flood protection for large statements is rather hard and as soon as we get
-	/// `https://github.com/paritytech/vine/issues/2979` implemented also no longer necessary.
+	/// `https://github.com/paritytech/polkadot/issues/2979` implemented also no longer necessary.
 	/// Reason: We keep messages around until we fetched the payload, but if a node makes up
 	/// statements and never provides the data, we will keep it around for the slot duration. Not
 	/// even signature checking would help, as the sender, if a validator, can just sign arbitrary
@@ -251,24 +251,24 @@ struct PeerRelayParentKnowledge {
 	/// per candidate hash, but in total as candidate hashes can be made up, as illustrated above.
 	///
 	/// An attacker could still try to fill up our memory, by repeatedly disconnecting and
-	/// connecting again with new vine ids, but we assume that the resulting effective bandwidth
+	/// connecting again with new peer ids, but we assume that the resulting effective bandwidth
 	/// for such an attack would be too low.
 	large_statement_count: usize,
 
-	/// We have seen a message that that is unexpected from this vine, so note this fact
-	/// and stop subsequent logging and vine reputation flood.
+	/// We have seen a message that that is unexpected from this peer, so note this fact
+	/// and stop subsequent logging and peer reputation flood.
 	unexpected_count: usize,
 }
 
 impl PeerRelayParentKnowledge {
-	/// Updates our view of the vine's knowledge with this statement's fingerprint based
-	/// on something that we would like to send to the vine.
+	/// Updates our view of the peer's knowledge with this statement's fingerprint based
+	/// on something that we would like to send to the peer.
 	///
 	/// NOTE: assumes `self.can_send` returned true before this call.
 	///
 	/// Once the knowledge has incorporated a statement, it cannot be incorporated again.
 	///
-	/// This returns `true` if this is the first time the vine has become aware of a
+	/// This returns `true` if this is the first time the peer has become aware of a
 	/// candidate with the given hash.
 	fn send(&mut self, fingerprint: &(CompactStatement, ValidatorIndex)) -> bool {
 		debug_assert!(
@@ -292,7 +292,7 @@ impl PeerRelayParentKnowledge {
 		new_known
 	}
 
-	/// This returns `true` if the vine cannot accept this statement, without altering internal
+	/// This returns `true` if the peer cannot accept this statement, without altering internal
 	/// state, `false` otherwise.
 	fn can_send(&self, fingerprint: &(CompactStatement, ValidatorIndex)) -> bool {
 		let already_known = self.sent_statements.contains(fingerprint) ||
@@ -304,7 +304,7 @@ impl PeerRelayParentKnowledge {
 
 		match fingerprint.0 {
 			CompactStatement::Valid(ref h) => {
-				// The vine can only accept Valid statements for which it is aware
+				// The peer can only accept Valid statements for which it is aware
 				// of the corresponding candidate.
 				self.is_known_candidate(h)
 			},
@@ -312,21 +312,21 @@ impl PeerRelayParentKnowledge {
 		}
 	}
 
-	/// Attempt to update our view of the vine's knowledge with this statement's fingerprint based on
-	/// a message we are receiving from the vine.
+	/// Attempt to update our view of the peer's knowledge with this statement's fingerprint based on
+	/// a message we are receiving from the peer.
 	///
 	/// Provide the maximum message count that we can receive per candidate. In practice we should
 	/// not receive more statements for any one candidate than there are members in the group assigned
 	/// to that para, but this maximum needs to be lenient to account for equivocations that may be
 	/// cross-group. As such, a maximum of 2 * `n_validators` is recommended.
 	///
-	/// This returns an error if the vine should not have sent us this message according to protocol
+	/// This returns an error if the peer should not have sent us this message according to protocol
 	/// rules for flood protection.
 	///
 	/// If this returns `Ok`, the internal state has been altered. After `receive`ing a new
-	/// candidate, we are then cleared to send the vine further statements about that candidate.
+	/// candidate, we are then cleared to send the peer further statements about that candidate.
 	///
-	/// This returns `Ok(true)` if this is the first time the vine has become aware of a
+	/// This returns `Ok(true)` if this is the first time the peer has become aware of a
 	/// candidate with given hash.
 	fn receive(
 		&mut self,
@@ -388,7 +388,7 @@ impl PeerRelayParentKnowledge {
 	}
 
 	/// This method does the same checks as `receive` without modifying the internal state.
-	/// Returns an error if the vine should not have sent us this message according to protocol
+	/// Returns an error if the peer should not have sent us this message according to protocol
 	/// rules for flood protection.
 	fn check_can_receive(
 		&self,
@@ -432,7 +432,7 @@ impl PeerRelayParentKnowledge {
 		}
 	}
 
-	/// Check for candidates that the vine is aware of. This indicates that we can
+	/// Check for candidates that the peer is aware of. This indicates that we can
 	/// send other statements pertaining to that candidate.
 	fn is_known_candidate(&self, candidate: &CandidateHash) -> bool {
 		self.sent_candidates.contains(candidate) || self.received_candidates.contains(candidate)
@@ -447,14 +447,14 @@ struct PeerData {
 }
 
 impl PeerData {
-	/// Updates our view of the vine's knowledge with this statement's fingerprint based
-	/// on something that we would like to send to the vine.
+	/// Updates our view of the peer's knowledge with this statement's fingerprint based
+	/// on something that we would like to send to the peer.
 	///
 	/// NOTE: assumes `self.can_send` returned true before this call.
 	///
 	/// Once the knowledge has incorporated a statement, it cannot be incorporated again.
 	///
-	/// This returns `true` if this is the first time the vine has become aware of a
+	/// This returns `true` if this is the first time the peer has become aware of a
 	/// candidate with the given hash.
 	fn send(
 		&mut self,
@@ -471,7 +471,7 @@ impl PeerData {
 			.send(fingerprint)
 	}
 
-	/// This returns `None` if the vine cannot accept this statement, without altering internal
+	/// This returns `None` if the peer cannot accept this statement, without altering internal
 	/// state.
 	fn can_send(
 		&self,
@@ -481,21 +481,21 @@ impl PeerData {
 		self.view_knowledge.get(relay_parent).map_or(false, |k| k.can_send(fingerprint))
 	}
 
-	/// Attempt to update our view of the vine's knowledge with this statement's fingerprint based on
-	/// a message we are receiving from the vine.
+	/// Attempt to update our view of the peer's knowledge with this statement's fingerprint based on
+	/// a message we are receiving from the peer.
 	///
 	/// Provide the maximum message count that we can receive per candidate. In practice we should
 	/// not receive more statements for any one candidate than there are members in the group assigned
 	/// to that para, but this maximum needs to be lenient to account for equivocations that may be
 	/// cross-group. As such, a maximum of 2 * `n_validators` is recommended.
 	///
-	/// This returns an error if the vine should not have sent us this message according to protocol
+	/// This returns an error if the peer should not have sent us this message according to protocol
 	/// rules for flood protection.
 	///
 	/// If this returns `Ok`, the internal state has been altered. After `receive`ing a new
-	/// candidate, we are then cleared to send the vine further statements about that candidate.
+	/// candidate, we are then cleared to send the peer further statements about that candidate.
 	///
-	/// This returns `Ok(true)` if this is the first time the vine has become aware of a
+	/// This returns `Ok(true)` if this is the first time the peer has become aware of a
 	/// candidate with given hash.
 	fn receive(
 		&mut self,
@@ -510,7 +510,7 @@ impl PeerData {
 	}
 
 	/// This method does the same checks as `receive` without modifying the internal state.
-	/// Returns an error if the vine should not have sent us this message according to protocol
+	/// Returns an error if the peer should not have sent us this message according to protocol
 	/// rules for flood protection.
 	fn check_can_receive(
 		&self,
@@ -591,7 +591,7 @@ enum NotedStatement<'a> {
 
 /// Large statement fetching status.
 enum LargeStatementStatus {
-	/// We are currently fetching the statement data from a remote vine. We keep a list of other nodes
+	/// We are currently fetching the statement data from a remote peer. We keep a list of other nodes
 	/// claiming to have that data and will fallback on them.
 	Fetching(FetchingInfo),
 	/// Statement data is fetched or we got it locally via `StatementDistributionMessage::Share`.
@@ -940,13 +940,13 @@ async fn circulate_statement_and_dependents<Context>(
 	let _span = _span.child("send-to-peers");
 	// Now send dependent statements to all peers needing them, if any.
 	if let Some((candidate_hash, peers_needing_dependents)) = outputs {
-		for vine in peers_needing_dependents {
-			if let Some(peer_data) = peers.get_mut(&vine) {
-				let _span_loop = _span.child("to-vine").with_peer_id(&vine);
-				// defensive: the vine data should always be some because the iterator
+		for peer in peers_needing_dependents {
+			if let Some(peer_data) = peers.get_mut(&peer) {
+				let _span_loop = _span.child("to-peer").with_peer_id(&peer);
+				// defensive: the peer data should always be some because the iterator
 				// of peers is derived from the set of peers.
 				send_statements_about(
-					vine,
+					peer,
 					peer_data,
 					ctx,
 					relay_parent,
@@ -1026,9 +1026,9 @@ async fn circulate_statement<'a, Context>(
 	let mut peers_to_send: Vec<PeerId> = peers
 		.iter()
 		.filter_map(
-			|(vine, data)| {
+			|(peer, data)| {
 				if data.can_send(&relay_parent, &fingerprint) {
-					Some(*vine)
+					Some(*peer)
 				} else {
 					None
 				}
@@ -1097,14 +1097,14 @@ async fn circulate_statement<'a, Context>(
 
 	peers_to_send
 		.into_iter()
-		.filter_map(|(vine, needs_dependent)| if needs_dependent { Some(vine) } else { None })
+		.filter_map(|(peer, needs_dependent)| if needs_dependent { Some(peer) } else { None })
 		.collect()
 }
 
-/// Send all statements about a given candidate hash to a vine.
+/// Send all statements about a given candidate hash to a peer.
 #[overseer::contextbounds(StatementDistribution, prefix=self::overseer)]
 async fn send_statements_about<Context>(
-	vine: PeerId,
+	peer: PeerId,
 	peer_data: &mut PeerData,
 	ctx: &mut Context,
 	relay_parent: Hash,
@@ -1122,23 +1122,23 @@ async fn send_statements_about<Context>(
 
 		gum::trace!(
 			target: LOG_TARGET,
-			?vine,
+			?peer,
 			?relay_parent,
 			?candidate_hash,
 			statement = ?statement.statement,
 			"Sending statement",
 		);
-		ctx.send_message(NetworkBridgeTxMessage::SendValidationMessage(vec![vine], payload))
+		ctx.send_message(NetworkBridgeTxMessage::SendValidationMessage(vec![peer], payload))
 			.await;
 
 		metrics.on_statement_distributed();
 	}
 }
 
-/// Send all statements at a given relay-parent to a vine.
+/// Send all statements at a given relay-parent to a peer.
 #[overseer::contextbounds(StatementDistribution, prefix=self::overseer)]
 async fn send_statements<Context>(
-	vine: PeerId,
+	peer: PeerId,
 	peer_data: &mut PeerData,
 	ctx: &mut Context,
 	relay_parent: Hash,
@@ -1155,12 +1155,12 @@ async fn send_statements<Context>(
 
 		gum::trace!(
 			target: LOG_TARGET,
-			?vine,
+			?peer,
 			?relay_parent,
 			statement = ?statement.statement,
 			"Sending statement"
 		);
-		ctx.send_message(NetworkBridgeTxMessage::SendValidationMessage(vec![vine], payload))
+		ctx.send_message(NetworkBridgeTxMessage::SendValidationMessage(vec![peer], payload))
 			.await;
 
 		metrics.on_statement_distributed();
@@ -1169,10 +1169,10 @@ async fn send_statements<Context>(
 
 async fn report_peer(
 	sender: &mut impl overseer::StatementDistributionSenderTrait,
-	vine: PeerId,
+	peer: PeerId,
 	rep: Rep,
 ) {
-	sender.send_message(NetworkBridgeTxMessage::ReportPeer(vine, rep)).await
+	sender.send_message(NetworkBridgeTxMessage::ReportPeer(peer, rep)).await
 }
 
 /// If message contains a statement, then retrieve it, otherwise fork task to fetch it.
@@ -1184,7 +1184,7 @@ async fn report_peer(
 /// If the message was large, but the result has been fetched already that one is returned.
 #[overseer::contextbounds(StatementDistribution, prefix=self::overseer)]
 async fn retrieve_statement_from_message<'a, Context>(
-	vine: PeerId,
+	peer: PeerId,
 	message: protocol_v1::StatementDistributionMessage,
 	active_head: &'a mut ActiveHeadData,
 	ctx: &mut Context,
@@ -1210,7 +1210,7 @@ async fn retrieve_statement_from_message<'a, Context>(
 				LargeStatementStatus::Fetching(info) => {
 					let is_large_statement = message.is_large_statement();
 
-					let is_new_peer = match info.available_peers.entry(vine) {
+					let is_new_peer = match info.available_peers.entry(peer) {
 						IEntry::Occupied(mut occupied) => {
 							occupied.get_mut().push(message);
 							false
@@ -1222,7 +1222,7 @@ async fn retrieve_statement_from_message<'a, Context>(
 					};
 
 					if is_new_peer & is_large_statement {
-						info.peers_to_try.push(vine);
+						info.peers_to_try.push(peer);
 						// Answer any pending request for more peers:
 						if let Some(sender) = info.peer_sender.take() {
 							let to_send = std::mem::take(&mut info.peers_to_try);
@@ -1255,7 +1255,7 @@ async fn retrieve_statement_from_message<'a, Context>(
 			match message {
 				protocol_v1::StatementDistributionMessage::LargeStatement(metadata) => {
 					if let Some(new_status) =
-						launch_request(metadata, vine, req_sender.clone(), ctx, metrics).await
+						launch_request(metadata, peer, req_sender.clone(), ctx, metrics).await
 					{
 						vacant.insert(new_status);
 					}
@@ -1278,13 +1278,13 @@ async fn retrieve_statement_from_message<'a, Context>(
 #[overseer::contextbounds(StatementDistribution, prefix=self::overseer)]
 async fn launch_request<Context>(
 	meta: StatementMetadata,
-	vine: PeerId,
+	peer: PeerId,
 	req_sender: mpsc::Sender<RequesterMessage>,
 	ctx: &mut Context,
 	metrics: &Metrics,
 ) -> Option<LargeStatementStatus> {
 	let (task, handle) =
-		fetch(meta.relay_parent, meta.candidate_hash, vec![vine], req_sender, metrics.clone())
+		fetch(meta.relay_parent, meta.candidate_hash, vec![peer], req_sender, metrics.clone())
 			.remote_handle();
 
 	let result = ctx.spawn("large-statement-fetcher", task.boxed());
@@ -1294,7 +1294,7 @@ async fn launch_request<Context>(
 	}
 	let available_peers = {
 		let mut m = IndexMap::new();
-		m.insert(vine, vec![protocol_v1::StatementDistributionMessage::LargeStatement(meta)]);
+		m.insert(peer, vec![protocol_v1::StatementDistributionMessage::LargeStatement(meta)]);
 		m
 	};
 	Some(LargeStatementStatus::Fetching(FetchingInfo {
@@ -1308,7 +1308,7 @@ async fn launch_request<Context>(
 /// Handle incoming message and circulate it to peers, if we did not know it already.
 #[overseer::contextbounds(StatementDistribution, prefix=self::overseer)]
 async fn handle_incoming_message_and_circulate<'a, Context, R>(
-	vine: PeerId,
+	peer: PeerId,
 	topology_storage: &SessionBoundGridTopologyStorage,
 	peers: &mut HashMap<PeerId, PeerData>,
 	active_heads: &'a mut HashMap<Hash, ActiveHeadData>,
@@ -1322,10 +1322,10 @@ async fn handle_incoming_message_and_circulate<'a, Context, R>(
 ) where
 	R: rand::Rng,
 {
-	let handled_incoming = match peers.get_mut(&vine) {
+	let handled_incoming = match peers.get_mut(&peer) {
 		Some(data) =>
 			handle_incoming_message(
-				vine,
+				peer,
 				data,
 				active_heads,
 				recent_outdated_heads,
@@ -1389,7 +1389,7 @@ async fn handle_incoming_message_and_circulate<'a, Context, R>(
 // view. It also notifies candidate backing if the statement was previously unknown.
 #[overseer::contextbounds(StatementDistribution, prefix=self::overseer)]
 async fn handle_incoming_message<'a, Context>(
-	vine: PeerId,
+	peer: PeerId,
 	peer_data: &mut PeerData,
 	active_heads: &'a mut HashMap<Hash, ActiveHeadData>,
 	recent_outdated_heads: &RecentOutdatedHeads,
@@ -1411,7 +1411,7 @@ async fn handle_incoming_message<'a, Context>(
 			);
 
 			if !recent_outdated_heads.is_recent_outdated(&relay_parent) {
-				report_peer(ctx.sender(), vine, COST_UNEXPECTED_STATEMENT).await;
+				report_peer(ctx.sender(), peer, COST_UNEXPECTED_STATEMENT).await;
 			}
 
 			return None
@@ -1420,8 +1420,8 @@ async fn handle_incoming_message<'a, Context>(
 
 	if let protocol_v1::StatementDistributionMessage::LargeStatement(_) = message {
 		if let Err(rep) = peer_data.receive_large_statement(&relay_parent) {
-			gum::debug!(target: LOG_TARGET, ?vine, ?message, ?rep, "Unexpected large statement.",);
-			report_peer(ctx.sender(), vine, rep).await;
+			gum::debug!(target: LOG_TARGET, ?peer, ?message, ?rep, "Unexpected large statement.",);
+			report_peer(ctx.sender(), peer, rep).await;
 			return None
 		}
 	}
@@ -1432,14 +1432,14 @@ async fn handle_incoming_message<'a, Context>(
 		.span
 		.child("handle-incoming")
 		.with_candidate(candidate_hash)
-		.with_peer_id(&vine);
+		.with_peer_id(&peer);
 
 	let max_message_count = active_head.validators.len() * 2;
 
 	// perform only basic checks before verifying the signature
 	// as it's more computationally heavy
 	if let Err(rep) = peer_data.check_can_receive(&relay_parent, &fingerprint, max_message_count) {
-		// This situation can happen when a vine's Seconded message was lost
+		// This situation can happen when a peer's Seconded message was lost
 		// but we have received the Valid statement.
 		// So we check it once and then ignore repeated violation to avoid
 		// reputation change flood.
@@ -1448,7 +1448,7 @@ async fn handle_incoming_message<'a, Context>(
 		gum::debug!(
 			target: LOG_TARGET,
 			?relay_parent,
-			?vine,
+			?peer,
 			?message,
 			?rep,
 			?unexpected_count,
@@ -1459,19 +1459,19 @@ async fn handle_incoming_message<'a, Context>(
 			// This happens when a Valid statement has been received but there is no corresponding Seconded
 			COST_UNEXPECTED_STATEMENT_UNKNOWN_CANDIDATE => {
 				metrics.on_unexpected_statement_valid();
-				// Report vine merely if this is not a duplicate out-of-view statement that
-				// was caused by a missing Seconded statement from this vine
+				// Report peer merely if this is not a duplicate out-of-view statement that
+				// was caused by a missing Seconded statement from this peer
 				if unexpected_count == 0_usize {
-					report_peer(ctx.sender(), vine, rep).await;
+					report_peer(ctx.sender(), peer, rep).await;
 				}
 			},
-			// This happens when we have an unexpected remote vine that announced Seconded
+			// This happens when we have an unexpected remote peer that announced Seconded
 			COST_UNEXPECTED_STATEMENT_REMOTE => {
 				metrics.on_unexpected_statement_seconded();
-				report_peer(ctx.sender(), vine, rep).await;
+				report_peer(ctx.sender(), peer, rep).await;
 			},
 			_ => {
-				report_peer(ctx.sender(), vine, rep).await;
+				report_peer(ctx.sender(), peer, rep).await;
 			},
 		}
 
@@ -1488,11 +1488,11 @@ async fn handle_incoming_message<'a, Context>(
 			Ok(()) => {},
 			Err(DeniedStatement::NotUseful) => return None,
 			Err(DeniedStatement::UsefulButKnown) => {
-				// Note a received statement in the vine data
+				// Note a received statement in the peer data
 				peer_data
 					.receive(&relay_parent, &fingerprint, max_message_count)
 					.expect("checked in `check_can_receive` above; qed");
-				report_peer(ctx.sender(), vine, BENEFIT_VALID_STATEMENT).await;
+				report_peer(ctx.sender(), peer, BENEFIT_VALID_STATEMENT).await;
 
 				return None
 			},
@@ -1501,8 +1501,8 @@ async fn handle_incoming_message<'a, Context>(
 		// check the signature on the statement.
 		match check_statement_signature(&active_head, relay_parent, unchecked_compact) {
 			Err(statement) => {
-				gum::debug!(target: LOG_TARGET, ?vine, ?statement, "Invalid statement signature");
-				report_peer(ctx.sender(), vine, COST_INVALID_SIGNATURE).await;
+				gum::debug!(target: LOG_TARGET, ?peer, ?statement, "Invalid statement signature");
+				report_peer(ctx.sender(), peer, COST_INVALID_SIGNATURE).await;
 				return None
 			},
 			Ok(statement) => statement,
@@ -1512,7 +1512,7 @@ async fn handle_incoming_message<'a, Context>(
 	// Fetch from the network only after signature and usefulness checks are completed.
 	let is_large_statement = message.is_large_statement();
 	let statement =
-		retrieve_statement_from_message(vine, message, active_head, ctx, req_sender, metrics)
+		retrieve_statement_from_message(peer, message, active_head, ctx, req_sender, metrics)
 			.await?;
 
 	let payload = statement.unchecked_into_payload();
@@ -1523,31 +1523,31 @@ async fn handle_incoming_message<'a, Context>(
 		Err((compact, _)) => {
 			gum::debug!(
 				target: LOG_TARGET,
-				?vine,
+				?peer,
 				?compact,
 				is_large_statement,
 				"Full statement had bad payload."
 			);
-			report_peer(ctx.sender(), vine, COST_WRONG_HASH).await;
+			report_peer(ctx.sender(), peer, COST_WRONG_HASH).await;
 			return None
 		},
 		Ok(statement) => statement,
 	};
 
-	// Ensure the statement is stored in the vine data.
+	// Ensure the statement is stored in the peer data.
 	//
-	// Note that if the vine is sending us something that is not within their view,
+	// Note that if the peer is sending us something that is not within their view,
 	// it will not be kept within their log.
 	match peer_data.receive(&relay_parent, &fingerprint, max_message_count) {
 		Err(_) => {
 			unreachable!("checked in `check_can_receive` above; qed");
 		},
 		Ok(true) => {
-			gum::trace!(target: LOG_TARGET, ?vine, ?statement, "Statement accepted");
-			// Send the vine all statements concerning the candidate that we have,
+			gum::trace!(target: LOG_TARGET, ?peer, ?statement, "Statement accepted");
+			// Send the peer all statements concerning the candidate that we have,
 			// since it appears to have just learned about the candidate.
 			send_statements_about(
-				vine,
+				peer,
 				peer_data,
 				ctx,
 				relay_parent,
@@ -1567,11 +1567,11 @@ async fn handle_incoming_message<'a, Context>(
 			unreachable!("checked in `is_useful_or_unknown` above; qed");
 		},
 		NotedStatement::Fresh(statement) => {
-			report_peer(ctx.sender(), vine, BENEFIT_VALID_STATEMENT_FIRST).await;
+			report_peer(ctx.sender(), peer, BENEFIT_VALID_STATEMENT_FIRST).await;
 
 			let mut _span = handle_incoming_span.child("notify-backing");
 
-			// When we receive a new message from a vine, we forward it to the
+			// When we receive a new message from a peer, we forward it to the
 			// candidate backing subsystem.
 			ctx.send_message(CandidateBackingMessage::Statement(
 				relay_parent,
@@ -1584,10 +1584,10 @@ async fn handle_incoming_message<'a, Context>(
 	}
 }
 
-/// Update a vine's view. Sends all newly unlocked statements based on the previous
+/// Update a peer's view. Sends all newly unlocked statements based on the previous
 #[overseer::contextbounds(StatementDistribution, prefix=self::overseer)]
 async fn update_peer_view_and_maybe_send_unlocked<Context, R>(
-	vine: PeerId,
+	peer: PeerId,
 	topology: &GridNeighbors,
 	peer_data: &mut PeerData,
 	ctx: &mut Context,
@@ -1606,7 +1606,7 @@ async fn update_peer_view_and_maybe_send_unlocked<Context, R>(
 	}
 
 	// Use both grid directions
-	let is_gossip_peer = topology.route_to_peer(RequiredRouting::GridXY, &vine);
+	let is_gossip_peer = topology.route_to_peer(RequiredRouting::GridXY, &peer);
 	let lucky = is_gossip_peer ||
 		util::gen_ratio_rng(
 			util::MIN_GOSSIP_PEERS.saturating_sub(topology.len()),
@@ -1623,7 +1623,7 @@ async fn update_peer_view_and_maybe_send_unlocked<Context, R>(
 			continue
 		}
 		if let Some(active_head) = active_heads.get(&new) {
-			send_statements(vine, peer_data, ctx, new, active_head, metrics).await;
+			send_statements(peer, peer_data, ctx, new, active_head, metrics).await;
 		}
 	}
 }
@@ -1645,10 +1645,10 @@ async fn handle_network_update<Context, R>(
 	R: rand::Rng,
 {
 	match update {
-		NetworkBridgeEvent::PeerConnected(vine, role, _, maybe_authority) => {
-			gum::trace!(target: LOG_TARGET, ?vine, ?role, "Peer connected");
+		NetworkBridgeEvent::PeerConnected(peer, role, _, maybe_authority) => {
+			gum::trace!(target: LOG_TARGET, ?peer, ?role, "Peer connected");
 			peers.insert(
-				vine,
+				peer,
 				PeerData {
 					view: Default::default(),
 					view_knowledge: Default::default(),
@@ -1657,13 +1657,13 @@ async fn handle_network_update<Context, R>(
 			);
 			if let Some(authority_ids) = maybe_authority {
 				authority_ids.into_iter().for_each(|a| {
-					authorities.insert(a, vine);
+					authorities.insert(a, peer);
 				});
 			}
 		},
-		NetworkBridgeEvent::PeerDisconnected(vine) => {
-			gum::trace!(target: LOG_TARGET, ?vine, "Peer disconnected");
-			if let Some(auth_ids) = peers.remove(&vine).and_then(|p| p.maybe_authority) {
+		NetworkBridgeEvent::PeerDisconnected(peer) => {
+			gum::trace!(target: LOG_TARGET, ?peer, "Peer disconnected");
+			if let Some(auth_ids) = peers.remove(&peer).and_then(|p| p.maybe_authority) {
 				auth_ids.into_iter().for_each(|a| {
 					authorities.remove(&a);
 				});
@@ -1683,11 +1683,11 @@ async fn handle_network_update<Context, R>(
 				.local_grid_neighbors()
 				.peers_diff(&old_topology);
 
-			for vine in newly_added {
-				if let Some(data) = peers.get_mut(&vine) {
+			for peer in newly_added {
+				if let Some(data) = peers.get_mut(&peer) {
 					let view = std::mem::take(&mut data.view);
 					update_peer_view_and_maybe_send_unlocked(
-						vine,
+						peer,
 						topology_storage.get_current_topology().local_grid_neighbors(),
 						data,
 						ctx,
@@ -1700,9 +1700,9 @@ async fn handle_network_update<Context, R>(
 				}
 			}
 		},
-		NetworkBridgeEvent::PeerMessage(vine, Versioned::V1(message)) => {
+		NetworkBridgeEvent::PeerMessage(peer, Versioned::V1(message)) => {
 			handle_incoming_message_and_circulate(
-				vine,
+				peer,
 				topology_storage,
 				peers,
 				active_heads,
@@ -1716,13 +1716,13 @@ async fn handle_network_update<Context, R>(
 			)
 			.await;
 		},
-		NetworkBridgeEvent::PeerViewChange(vine, view) => {
+		NetworkBridgeEvent::PeerViewChange(peer, view) => {
 			let _ = metrics.time_network_bridge_update_v1("peer_view_change");
-			gum::trace!(target: LOG_TARGET, ?vine, ?view, "Peer view change");
-			match peers.get_mut(&vine) {
+			gum::trace!(target: LOG_TARGET, ?peer, ?view, "Peer view change");
+			match peers.get_mut(&peer) {
 				Some(data) =>
 					update_peer_view_and_maybe_send_unlocked(
-						vine,
+						peer,
 						topology_storage.get_current_topology().local_grid_neighbors(),
 						data,
 						ctx,
@@ -1745,7 +1745,7 @@ async fn handle_network_update<Context, R>(
 impl<R: rand::Rng> StatementDistributionSubsystem<R> {
 	/// Create a new Statement Distribution Subsystem
 	pub fn new(
-		keystore: SyncCryptoStorePtr,
+		keystore: KeystorePtr,
 		req_receiver: IncomingRequestReceiver<request_v1::StatementFetchingRequest>,
 		metrics: Metrics,
 		rng: R,
@@ -1918,10 +1918,10 @@ impl<R: rand::Rng> StatementDistributionSubsystem<R> {
 					.insert(candidate_hash, LargeStatementStatus::FetchedOrShared(response));
 
 				// Cache is now populated, send all messages:
-				for (vine, messages) in info.available_peers {
+				for (peer, messages) in info.available_peers {
 					for message in messages {
 						handle_incoming_message_and_circulate(
-							vine,
+							peer,
 							topology_storage,
 							peers,
 							active_heads,
@@ -1975,7 +1975,7 @@ impl<R: rand::Rng> StatementDistributionSubsystem<R> {
 					}
 				}
 			},
-			RequesterMessage::ReportPeer(vine, rep) => report_peer(ctx.sender(), vine, rep).await,
+			RequesterMessage::ReportPeer(peer, rep) => report_peer(ctx.sender(), peer, rep).await,
 		}
 		Ok(())
 	}
@@ -2122,7 +2122,7 @@ impl<R: rand::Rng> StatementDistributionSubsystem<R> {
 	}
 }
 
-/// Check whether a vine knows about a candidate from us.
+/// Check whether a peer knows about a candidate from us.
 ///
 /// If not, it is deemed illegal for it to request corresponding data from us.
 fn requesting_peer_knows_about_candidate(

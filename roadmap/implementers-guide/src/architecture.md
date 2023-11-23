@@ -2,9 +2,9 @@
 
 This section aims to describe, at a high level, the code architecture and subsystems involved in the implementation of an individual Parachain Host. It also illuminates certain subtleties and challenges faced in the design and implementation of those subsystems.
 
-To recap, vine includes a blockchain known as the relay-chain. A blockchain is a Directed Acyclic Graph (DAG) of state transitions, where every block can be considered to be the head of a linked-list (known as a "chain" or "fork") with a cumulative state which is determined by applying the state transition of each block in turn. All paths through the DAG terminate at the Genesis Block. In fact, the blockchain is a tree, since each block can have only one parent.
+To recap, Polkadot includes a blockchain known as the relay-chain. A blockchain is a Directed Acyclic Graph (DAG) of state transitions, where every block can be considered to be the head of a linked-list (known as a "chain" or "fork") with a cumulative state which is determined by applying the state transition of each block in turn. All paths through the DAG terminate at the Genesis Block. In fact, the blockchain is a tree, since each block can have only one parent.
 
-```vine process
+```dot process
 digraph {
 	node [shape=box];
     genesis [label = Genesis]
@@ -33,7 +33,7 @@ The first category of questions will be addressed by the Runtime, which defines 
 
 The second category of questions addressed by Node-side behavior. Node-side behavior defines all activities that a node undertakes, given its view of the blockchain/block-DAG. Node-side behavior can take into account all or many of the forks of the blockchain, and only conditionally undertake certain activities based on which forks it is aware of, as well as the state of the head of those forks.
 
-```vine process
+```dot process
 digraph G {
     Runtime [shape=box]
     "Node" [shape=box margin=0.5]

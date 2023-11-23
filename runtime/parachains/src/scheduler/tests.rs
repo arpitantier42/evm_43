@@ -1,43 +1,47 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 
 use frame_support::assert_ok;
 use keyring::Sr25519Keyring;
-use primitives::v2::{BlockNumber, CollatorId, SessionIndex, ValidatorId};
+use primitives::{BlockNumber, CollatorId, SessionIndex, ValidationCode, ValidatorId};
 
 use crate::{
 	configuration::HostConfiguration,
 	initializer::SessionChangeNotification,
 	mock::{
-		new_test_ext, Configuration, MockGenesisConfig, Paras, ParasShared, Scheduler, System, Test,
+		new_test_ext, Configuration, MockGenesisConfig, Paras, ParasShared, RuntimeOrigin,
+		Scheduler, System, Test,
 	},
 	paras::{ParaGenesisArgs, ParaKind},
 };
 
 fn schedule_blank_para(id: ParaId, parakind: ParaKind) {
+	let validation_code: ValidationCode = vec![1, 2, 3].into();
 	assert_ok!(Paras::schedule_para_initialize(
 		id,
 		ParaGenesisArgs {
 			genesis_head: Vec::new().into(),
-			validation_code: vec![1, 2, 3].into(),
+			validation_code: validation_code.clone(),
 			para_kind: parakind,
 		}
 	));
+
+	assert_ok!(Paras::add_trusted_validation_code(RuntimeOrigin::root(), validation_code));
 }
 
 fn run_to_block(
@@ -865,7 +869,7 @@ fn schedule_rotates_groups() {
 			_ => None,
 		});
 
-		let session_start_block = <Scheduler as Store>::SessionStartBlock::get();
+		let session_start_block = SessionStartBlock::<Test>::get();
 		assert_eq!(session_start_block, 1);
 
 		Scheduler::add_parathread_claim(ParathreadClaim(thread_a, collator.clone()));

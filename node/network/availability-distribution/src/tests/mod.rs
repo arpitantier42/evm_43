@@ -1,28 +1,28 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashSet;
 
 use futures::{executor, future, Future};
 
-use vine_node_network_protocol::request_response::{IncomingRequest, ReqProtocolNames};
-use vine_primitives::v2::{CoreState, Hash};
-use sp_keystore::SyncCryptoStorePtr;
+use polkadot_node_network_protocol::request_response::{IncomingRequest, ReqProtocolNames};
+use polkadot_primitives::{CoreState, Hash};
+use sp_keystore::KeystorePtr;
 
-use vine_node_subsystem_test_helpers as test_helpers;
+use polkadot_node_subsystem_test_helpers as test_helpers;
 
 use super::*;
 
@@ -34,7 +34,7 @@ use state::{TestHarness, TestState};
 pub(crate) mod mock;
 
 fn test_harness<T: Future<Output = ()>>(
-	keystore: SyncCryptoStorePtr,
+	keystore: KeystorePtr,
 	test_fx: impl FnOnce(TestHarness) -> T,
 ) {
 	sp_tracing::try_init_simple();

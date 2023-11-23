@@ -1,25 +1,25 @@
-// Copyright 2017-2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 ///! Error types for provisioner module
 use fatality::Nested;
 use futures::channel::{mpsc, oneshot};
-use vine_node_subsystem::errors::{ChainApiError, RuntimeApiError, SubsystemError};
-use vine_node_subsystem_util as util;
-use vine_primitives::v2::Hash;
+use polkadot_node_subsystem::errors::{ChainApiError, RuntimeApiError, SubsystemError};
+use polkadot_node_subsystem_util as util;
+use polkadot_primitives::Hash;
 
 pub type FatalResult<T> = std::result::Result<T, FatalError>;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -75,6 +75,10 @@ pub enum Error {
 
 	#[error(transparent)]
 	SubsystemError(#[from] SubsystemError),
+
+	#[fatal]
+	#[error(transparent)]
+	OverseerExited(SubsystemError),
 }
 
 /// Used by `get_onchain_disputes` to represent errors related to fetching on-chain disputes from the Runtime

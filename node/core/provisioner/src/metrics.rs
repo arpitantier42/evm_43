@@ -1,21 +1,21 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::disputes::prioritized_selection::PartitionedDisputes;
-use vine_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_node_subsystem_util::metrics::{self, prometheus};
 
 #[derive(Clone)]
 struct MetricsInner {
@@ -29,13 +29,16 @@ struct MetricsInner {
 	inherent_data_response_bitfields: prometheus::Histogram,
 
 	/// The following metrics track how many disputes/votes the runtime will have to process. These will count
-	/// all recent statements meaning every dispute from last sessions: 10 min , 60 min on  and
-	/// 4 hours on vine. The metrics are updated only when the node authors a block, so values vary across nodes.
+	/// all recent statements meaning every dispute from last sessions: 10 min on Rococo, 60 min on Kusama and
+	/// 4 hours on Polkadot. The metrics are updated only when the node authors a block, so values vary across nodes.
 	inherent_data_dispute_statement_sets: prometheus::Counter<prometheus::U64>,
 	inherent_data_dispute_statements: prometheus::CounterVec<prometheus::U64>,
 
 	/// The disputes received from `disputes-coordinator` by partition
 	partitioned_disputes: prometheus::CounterVec<prometheus::U64>,
+
+	/// The disputes fetched from the runtime.
+	fetched_onchain_disputes: prometheus::Counter<prometheus::U64>,
 }
 
 /// Provisioner metrics.
@@ -143,6 +146,12 @@ impl Metrics {
 				.inc_by(inactive_concluded_known_onchain.len().try_into().unwrap_or(0));
 		}
 	}
+
+	pub(crate) fn on_fetched_onchain_disputes(&self, onchain_count: u64) {
+		if let Some(metrics) = &self.0 {
+			metrics.fetched_onchain_disputes.inc_by(onchain_count);
+		}
+	}
 }
 
 impl metrics::Metrics for Metrics {
@@ -151,7 +160,7 @@ impl metrics::Metrics for Metrics {
 			inherent_data_requests: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_inherent_data_requests_total",
+						"polkadot_parachain_inherent_data_requests_total",
 						"Number of InherentData requests served by provisioner.",
 					),
 					&["success"],
@@ -160,14 +169,14 @@ impl metrics::Metrics for Metrics {
 			)?,
 			request_inherent_data_duration: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_provisioner_request_inherent_data_time",
+					"polkadot_parachain_provisioner_request_inherent_data_time",
 					"Time spent within `provisioner::request_inherent_data`",
 				))?,
 				registry,
 			)?,
 			provisionable_data_duration: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_provisioner_provisionable_data_time",
+					"polkadot_parachain_provisioner_provisionable_data_time",
 					"Time spent within `provisioner::provisionable_data`",
 				))?,
 				registry,
@@ -175,7 +184,7 @@ impl metrics::Metrics for Metrics {
 			inherent_data_dispute_statements: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_inherent_data_dispute_statements",
+						"polkadot_parachain_inherent_data_dispute_statements",
 						"Number of dispute statements passed to `create_inherent()`.",
 					),
 					&["validity"],
@@ -184,7 +193,7 @@ impl metrics::Metrics for Metrics {
 			)?,
 			inherent_data_dispute_statement_sets: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_inherent_data_dispute_statement_sets",
+					"polkadot_parachain_inherent_data_dispute_statement_sets",
 					"Number of dispute statements sets passed to `create_inherent()`.",
 				)?,
 				registry,
@@ -192,7 +201,7 @@ impl metrics::Metrics for Metrics {
 			inherent_data_response_bitfields: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_provisioner_inherent_data_response_bitfields_sent",
+						"polkadot_parachain_provisioner_inherent_data_response_bitfields_sent",
 						"Number of inherent bitfields sent in response to `ProvisionerMessage::RequestInherentData`.",
 					).buckets(vec![0.0, 10.0, 25.0, 50.0, 75.0, 100.0, 150.0, 200.0, 250.0, 300.0]),
 				)?,
@@ -201,10 +210,15 @@ impl metrics::Metrics for Metrics {
 			partitioned_disputes: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_provisioner_partitioned_disputes",
-						"some fancy description",
+						"polkadot_parachain_provisioner_partitioned_disputes",
+						"Number of disputes partitioned by type.",
 					),
 					&["partition"],
+				)?,
+				&registry,
+			)?,
+			fetched_onchain_disputes: prometheus::register(
+				prometheus::Counter::new("polkadot_parachain_fetched_onchain_disputes", "Number of disputes fetched from the runtime"
 				)?,
 				&registry,
 			)?,

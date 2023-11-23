@@ -21,7 +21,7 @@ Which subsystems send messages to which other subsystems.
 **Note**: Messages with a filled diamond arrowhead ("♦") include a `oneshot::Sender` which communicates a response from the recipient.
 Messages with an open triangle arrowhead ("Δ") do not include a return sender.
 
-```vine process
+```dot process
 digraph {
     rankdir=LR;
     node [shape = oval];
@@ -263,7 +263,7 @@ sequenceDiagram
         SD ->> NB: SendValidationMessage
 
         Note right of NB: Bridge sends validation message to all appropriate peers
-    else On receipt of vine validation message
+    else On receipt of peer validation message
         NB ->> SD: NetworkBridgeUpdate
 
         % fn handle_incoming_message
@@ -351,7 +351,7 @@ sequenceDiagram
 ```
 
 `BitfieldDistribution` is, like the other `*Distribution` subsystems, primarily interested in implementing
-a vine-to-vine gossip network propagating its particular messages. However, it also serves as an essential
+a peer-to-peer gossip network propagating its particular messages. However, it also serves as an essential
 relay passing the message along.
 
 ```mermaid

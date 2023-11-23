@@ -1,34 +1,36 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use futures::{future::Either, FutureExt, StreamExt, TryFutureExt};
 
-use sp_keystore::SyncCryptoStorePtr;
+use sp_keystore::KeystorePtr;
 
-use vine_node_network_protocol::request_response::{v1, IncomingRequestReceiver};
-use vine_node_subsystem::{
-	messages::AvailabilityDistributionMessage, overseer, FromOrchestra, OverseerSignal,
+use polkadot_node_network_protocol::request_response::{v1, IncomingRequestReceiver};
+use polkadot_node_subsystem::{
+	jaeger, messages::AvailabilityDistributionMessage, overseer, FromOrchestra, OverseerSignal,
 	SpawnedSubsystem, SubsystemError,
 };
+use polkadot_primitives::Hash;
+use std::collections::HashMap;
 
 /// Error and [`Result`] type for this subsystem.
 mod error;
 use error::{log_error, FatalError, Result};
 
-use vine_node_subsystem_util::runtime::RuntimeInfo;
+use polkadot_node_subsystem_util::runtime::RuntimeInfo;
 
 /// `Requester` taking care of requesting chunks for candidates pending availability.
 mod requester;
@@ -83,11 +85,7 @@ impl<Context> AvailabilityDistributionSubsystem {
 #[overseer::contextbounds(AvailabilityDistribution, prefix = self::overseer)]
 impl AvailabilityDistributionSubsystem {
 	/// Create a new instance of the availability distribution.
-	pub fn new(
-		keystore: SyncCryptoStorePtr,
-		recvs: IncomingRequestReceivers,
-		metrics: Metrics,
-	) -> Self {
+	pub fn new(keystore: KeystorePtr, recvs: IncomingRequestReceivers, metrics: Metrics) -> Self {
 		let runtime = RuntimeInfo::new(Some(keystore));
 		Self { runtime, recvs, metrics }
 	}
@@ -95,6 +93,7 @@ impl AvailabilityDistributionSubsystem {
 	/// Start processing work as passed on from the Overseer.
 	async fn run<Context>(self, mut ctx: Context) -> std::result::Result<(), FatalError> {
 		let Self { mut runtime, recvs, metrics } = self;
+		let mut spans: HashMap<Hash, jaeger::PerLeafSpan> = HashMap::new();
 
 		let IncomingRequestReceivers { pov_req_receiver, chunk_req_receiver } = recvs;
 		let mut requester = Requester::new(metrics.clone()).fuse();
@@ -135,15 +134,24 @@ impl AvailabilityDistributionSubsystem {
 			};
 			match message {
 				FromOrchestra::Signal(OverseerSignal::ActiveLeaves(update)) => {
+					let cloned_leaf = match update.activated.clone() {
+						Some(activated) => activated,
+						None => continue,
+					};
+					let span =
+						jaeger::PerLeafSpan::new(cloned_leaf.span, "availability-distribution");
+					spans.insert(cloned_leaf.hash, span);
 					log_error(
 						requester
 							.get_mut()
-							.update_fetching_heads(&mut ctx, &mut runtime, update)
+							.update_fetching_heads(&mut ctx, &mut runtime, update, &spans)
 							.await,
 						"Error in Requester::update_fetching_heads",
 					)?;
 				},
-				FromOrchestra::Signal(OverseerSignal::BlockFinalized(..)) => {},
+				FromOrchestra::Signal(OverseerSignal::BlockFinalized(hash, _)) => {
+					spans.remove(&hash);
+				},
 				FromOrchestra::Signal(OverseerSignal::Conclude) => return Ok(()),
 				FromOrchestra::Communication {
 					msg:
@@ -156,6 +164,15 @@ impl AvailabilityDistributionSubsystem {
 							tx,
 						},
 				} => {
+					let span = spans
+						.get(&relay_parent)
+						.map(|span| span.child("fetch-pov"))
+						.unwrap_or_else(|| jaeger::Span::new(&relay_parent, "fetch-pov"))
+						.with_trace_id(candidate_hash)
+						.with_candidate(candidate_hash)
+						.with_relay_parent(relay_parent)
+						.with_stage(jaeger::Stage::AvailabilityDistribution);
+
 					log_error(
 						pov_requester::fetch_pov(
 							&mut ctx,
@@ -167,6 +184,7 @@ impl AvailabilityDistributionSubsystem {
 							pov_hash,
 							tx,
 							metrics.clone(),
+							&span,
 						)
 						.await,
 						"pov_requester::fetch_pov",

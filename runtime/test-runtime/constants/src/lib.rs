@@ -1,18 +1,18 @@
-// Copyright 2019-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -20,17 +20,17 @@ pub mod weights;
 
 /// Money matters.
 pub mod currency {
-	use primitives::v2::Balance;
+	use primitives::Balance;
 
-	pub const VNES: Balance = 1_000_000_000_000;
-	pub const DOLLARS: Balance = VNES;
+	pub const DOTS: Balance = 1_000_000_000_000;
+	pub const DOLLARS: Balance = DOTS;
 	pub const CENTS: Balance = DOLLARS / 100;
 	pub const MILLICENTS: Balance = CENTS / 1_000;
 }
 
 /// Time and blocks.
 pub mod time {
-	use primitives::v2::{BlockNumber, Moment};
+	use primitives::{BlockNumber, Moment};
 	// Testnet
 	pub const MILLISECS_PER_BLOCK: Moment = 6000;
 	pub const SLOT_DURATION: Moment = MILLISECS_PER_BLOCK;
@@ -45,7 +45,7 @@ pub mod time {
 	// 1 in 4 blocks (on average, not counting collisions) will be primary babe blocks.
 	// The choice of is done in accordance to the slot duration and expected target
 	// block time, for safely resisting network delays of maximum two seconds.
-	// <https://research.web3.foundation/en/latest/vine/BABE/Babe/#6-practical-results>
+	// <https://research.web3.foundation/en/latest/polkadot/BABE/Babe/#6-practical-results>
 	pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 }
 
@@ -55,7 +55,7 @@ pub mod fee {
 	use frame_support::weights::{
 		WeightToFeeCoefficient, WeightToFeeCoefficients, WeightToFeePolynomial,
 	};
-	use primitives::v2::Balance;
+	use primitives::Balance;
 	use smallvec::smallvec;
 	pub use sp_runtime::Perbill;
 

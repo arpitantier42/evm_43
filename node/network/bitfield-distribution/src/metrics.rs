@@ -1,20 +1,20 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use vine_node_subsystem_util::metrics::{prometheus, Metrics as MetricsTrait};
+use polkadot_node_subsystem_util::metrics::{prometheus, Metrics as MetricsTrait};
 
 #[derive(Clone)]
 struct MetricsInner {
@@ -69,35 +69,35 @@ impl MetricsTrait for Metrics {
 		let metrics = MetricsInner {
 			sent_own_availability_bitfields: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_sent_own_availabilty_bitfields_total",
+					"polkadot_parachain_sent_own_availabilty_bitfields_total",
 					"Number of own availability bitfields sent to other peers.",
 				)?,
 				registry,
 			)?,
 			received_availability_bitfields: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_received_availabilty_bitfields_total",
+					"polkadot_parachain_received_availabilty_bitfields_total",
 					"Number of valid availability bitfields received from other peers.",
 				)?,
 				registry,
 			)?,
 			active_leaves_update: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_bitfield_distribution_active_leaves_update",
+					"polkadot_parachain_bitfield_distribution_active_leaves_update",
 					"Time spent within `bitfield_distribution::active_leaves_update`",
 				))?,
 				registry,
 			)?,
 			handle_bitfield_distribution: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_bitfield_distribution_handle_bitfield_distribution",
+					"polkadot_parachain_bitfield_distribution_handle_bitfield_distribution",
 					"Time spent within `bitfield_distribution::handle_bitfield_distribution`",
 				))?,
 				registry,
 			)?,
 			handle_network_msg: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_bitfield_distribution_handle_network_msg",
+					"polkadot_parachain_bitfield_distribution_handle_network_msg",
 					"Time spent within `bitfield_distribution::handle_network_msg`",
 				))?,
 				registry,

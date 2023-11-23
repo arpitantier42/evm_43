@@ -1,22 +1,22 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-//! vine Jaeger related primitives
+//! Polkadot Jaeger related primitives
 //!
-//! Provides primitives used by vine for interfacing with Jaeger.
+//! Provides primitives used by Polkadot for interfacing with Jaeger.
 //!
 //! # Integration
 //!
@@ -100,7 +100,7 @@ impl Jaeger {
 			Self::Launched { .. } => {},
 			_ => {
 				let (traces_in, _traces_out) = mick_jaeger::init(mick_jaeger::Config {
-					service_name: "vine-jaeger-test".to_owned(),
+					service_name: "polkadot-jaeger-test".to_owned(),
 				});
 				*instance = Self::Launched { traces_in };
 			},
@@ -121,7 +121,7 @@ impl Jaeger {
 		log::info!("🐹 Collecting jaeger spans for {:?}", &jaeger_agent);
 
 		let (traces_in, mut traces_out) = mick_jaeger::init(mick_jaeger::Config {
-			service_name: format!("vine-{}", cfg.node_name),
+			service_name: format!("polkadot-{}", cfg.node_name),
 		});
 
 		// Spawn a background task that pulls span information and sends them on the network.

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::{
 	btree_map::{Entry as Bentry, Keys as Bkeys},
@@ -21,11 +21,11 @@ use std::collections::{
 
 use parity_scale_codec::{Decode, Encode};
 
-use sp_application_crypto::AppKey;
-use sp_keystore::{CryptoStore, Error as KeystoreError, SyncCryptoStorePtr};
+use sp_application_crypto::AppCrypto;
+use sp_keystore::{Error as KeystoreError, KeystorePtr};
 
 use super::{Statement, UncheckedSignedFullStatement};
-use vine_primitives::v2::{
+use polkadot_primitives::{
 	CandidateHash, CandidateReceipt, DisputeStatement, InvalidDisputeStatementKind, SessionIndex,
 	SigningContext, ValidDisputeStatementKind, ValidatorId, ValidatorIndex, ValidatorSignature,
 };
@@ -207,8 +207,8 @@ impl SignedDisputeStatement {
 
 	/// Sign this statement with the given keystore and key. Pass `valid = true` to
 	/// indicate validity of the candidate, and `valid = false` to indicate invalidity.
-	pub async fn sign_explicit(
-		keystore: &SyncCryptoStorePtr,
+	pub fn sign_explicit(
+		keystore: &KeystorePtr,
 		valid: bool,
 		candidate_hash: CandidateHash,
 		session_index: SessionIndex,
@@ -221,27 +221,16 @@ impl SignedDisputeStatement {
 		};
 
 		let data = dispute_statement.payload_data(candidate_hash, session_index);
-		let signature = CryptoStore::sign_with(
-			&**keystore,
-			ValidatorId::ID,
-			&validator_public.clone().into(),
-			&data,
-		)
-		.await?;
-
-		let signature = match signature {
-			Some(sig) =>
-				sig.try_into().map_err(|_| KeystoreError::KeyNotSupported(ValidatorId::ID))?,
-			None => return Ok(None),
-		};
-
-		Ok(Some(Self {
-			dispute_statement,
-			candidate_hash,
-			validator_public,
-			validator_signature: signature,
-			session_index,
-		}))
+		let signature = keystore
+			.sr25519_sign(ValidatorId::ID, validator_public.as_ref(), &data)?
+			.map(|sig| Self {
+				dispute_statement,
+				candidate_hash,
+				validator_public,
+				validator_signature: sig.into(),
+				session_index,
+			});
+		Ok(signature)
 	}
 
 	/// Access the underlying dispute statement

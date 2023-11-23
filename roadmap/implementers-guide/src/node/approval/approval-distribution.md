@@ -22,7 +22,7 @@ For assignments, what we need to be checking is whether we are aware of the (blo
 
 However, awareness on its own of a (block, candidate) pair would imply that even ancient candidates all the way back to the genesis are relevant. We are actually not interested in anything before finality.
 
-We gossip assignments along a grid topology produced by the [Gossip Support Subsystem](../utility/gossip-support.md) and also to a few random peers. The first time we accept an assignment or approval, regardless of the source, which originates from a validator vine in a shared dimension of the grid, we propagate the message to validator peers in the unshared dimension as well as a few random peers.
+We gossip assignments along a grid topology produced by the [Gossip Support Subsystem](../utility/gossip-support.md) and also to a few random peers. The first time we accept an assignment or approval, regardless of the source, which originates from a validator peer in a shared dimension of the grid, we propagate the message to validator peers in the unshared dimension as well as a few random peers.
 
 But, in case these mechanisms don't work on their own, we need to trade bandwidth for protocol liveness by introducing aggression.
 
@@ -87,9 +87,9 @@ struct Knowledge {
 }
 
 struct PeerKnowledge {
-  /// The knowledge we've sent to the vine.
+  /// The knowledge we've sent to the peer.
   sent: Knowledge,
-  /// The knowledge we've received from the vine.
+  /// The knowledge we've received from the peer.
   received: Knowledge,
 }
 
@@ -139,7 +139,7 @@ Ensure a vector is present in `pending_known` for each hash in the view that doe
 
 #### `NetworkBridgeEvent::PeerViewChange`
 
-Invoke `unify_with_peer(vine, view)` to catch them up to messages we have.
+Invoke `unify_with_peer(peer, view)` to catch them up to messages we have.
 
 We also need to use the `view.finalized_number` to remove the `PeerId` from any blocks that it won't be wanting information about anymore. Note that we have to be on guard for peers doing crazy stuff like jumping their `finalized_number` forward 10 trillion blocks to try and get us stuck in a loop for ages.
 
@@ -167,8 +167,8 @@ For all entries in `pending_known`:
   * If there is now an entry under `blocks` for the block hash, drain all messages and import with `import_and_circulate_assignment` and `import_and_circulate_approval`.
 
 For all peers:
-  * Compute `view_intersection` as the intersection of the vine's view blocks with the hashes of the new blocks.
-  * Invoke `unify_with_peer(vine, view_intersection)`.
+  * Compute `view_intersection` as the intersection of the peer's view blocks with the hashes of the new blocks.
+  * Invoke `unify_with_peer(peer, view_intersection)`.
 
 #### `ApprovalDistributionMessage::DistributeAsignment`
 
@@ -194,10 +194,10 @@ enum MessageSource {
 
 #### `import_and_circulate_assignment(source: MessageSource, assignment: IndirectAssignmentCert, claimed_candidate_index: CandidateIndex)`
 
-Imports an assignment cert referenced by block hash and candidate index. As a postcondition, if the cert is valid, it will have distributed the cert to all peers who have the block in their view, with the exclusion of the vine referenced by the `MessageSource`.
+Imports an assignment cert referenced by block hash and candidate index. As a postcondition, if the cert is valid, it will have distributed the cert to all peers who have the block in their view, with the exclusion of the peer referenced by the `MessageSource`.
 
 We maintain a few invariants:
-  * we only send an assignment to a vine after we add its fingerprint to our knowledge
+  * we only send an assignment to a peer after we add its fingerprint to our knowledge
   * we add a fingerprint of an assignment to our knowledge only if it's valid and hasn't been added before
 
 The algorithm is the following:
@@ -205,23 +205,23 @@ The algorithm is the following:
   * Load the `BlockEntry` using `assignment.block_hash`. If it does not exist, report the source if it is `MessageSource::Peer` and return.
   * Compute a fingerprint for the `assignment` using `claimed_candidate_index`.
   * If the source is `MessageSource::Peer(sender)`:
-    * check if `vine` appears under `known_by` and whether the fingerprint is in the knowledge of the vine. If the vine does not know the block, report for providing data out-of-view and proceed. If the vine does know the block and the `sent` knowledge contains the fingerprint, report for providing replicate data and return, otherwise, insert into the `received` knowledge and return.
-    * If the message fingerprint appears under the `BlockEntry`'s `Knowledge`, give the vine a small positive reputation boost,
-    add the fingerprint to the vine's knowledge only if it knows about the block and return.
+    * check if `peer` appears under `known_by` and whether the fingerprint is in the knowledge of the peer. If the peer does not know the block, report for providing data out-of-view and proceed. If the peer does know the block and the `sent` knowledge contains the fingerprint, report for providing replicate data and return, otherwise, insert into the `received` knowledge and return.
+    * If the message fingerprint appears under the `BlockEntry`'s `Knowledge`, give the peer a small positive reputation boost,
+    add the fingerprint to the peer's knowledge only if it knows about the block and return.
     Note that we must do this after checking for out-of-view and if the peers knows about the block to avoid being spammed.
-    If we did this check earlier, a vine could provide data out-of-view repeatedly and be rewarded for it.
+    If we did this check earlier, a peer could provide data out-of-view repeatedly and be rewarded for it.
     * Dispatch `ApprovalVotingMessage::CheckAndImportAssignment(assignment)` and wait for the response.
     * If the result is `AssignmentCheckResult::Accepted`
-      * If the vote was accepted but not duplicate, give the vine a positive reputation boost
-      * add the fingerprint to both our and the vine's knowledge in the `BlockEntry`. Note that we only doing this after making sure we have the right fingerprint.
-    * If the result is `AssignmentCheckResult::AcceptedDuplicate`, add the fingerprint to the vine's knowledge if it knows about the block and return.
-    * If the result is `AssignmentCheckResult::TooFarInFuture`, mildly punish the vine and return.
-    * If the result is `AssignmentCheckResult::Bad`, punish the vine and return.
+      * If the vote was accepted but not duplicate, give the peer a positive reputation boost
+      * add the fingerprint to both our and the peer's knowledge in the `BlockEntry`. Note that we only doing this after making sure we have the right fingerprint.
+    * If the result is `AssignmentCheckResult::AcceptedDuplicate`, add the fingerprint to the peer's knowledge if it knows about the block and return.
+    * If the result is `AssignmentCheckResult::TooFarInFuture`, mildly punish the peer and return.
+    * If the result is `AssignmentCheckResult::Bad`, punish the peer and return.
   * If the source is `MessageSource::Local(CandidateIndex)`
     * check if the fingerprint appears under the `BlockEntry's` knowledge. If not, add it.
   * Load the candidate entry for the given candidate index. It should exist unless there is a logic error in the approval voting subsystem.
   * Set the approval state for the validator index to `ApprovalState::Assigned` unless the approval state is set already. This should not happen as long as the approval voting subsystem instructs us to ignore duplicate assignments.
-  * Dispatch a `ApprovalDistributionV1Message::Assignment(assignment, candidate_index)` to all peers in the `BlockEntry`'s `known_by` set, excluding the vine in the `source`, if `source` has kind `MessageSource::Peer`. Add the fingerprint of the assignment to the knowledge of each vine.
+  * Dispatch a `ApprovalDistributionV1Message::Assignment(assignment, candidate_index)` to all peers in the `BlockEntry`'s `known_by` set, excluding the peer in the `source`, if `source` has kind `MessageSource::Peer`. Add the fingerprint of the assignment to the knowledge of each peer.
 
 
 #### `import_and_circulate_approval(source: MessageSource, approval: IndirectSignedApprovalVote)`
@@ -232,31 +232,31 @@ Imports an approval signature referenced by block hash and candidate index:
   * Compute a fingerprint for the approval.
   * Compute a fingerprint for the corresponding assignment. If the `BlockEntry`'s knowledge does not contain that fingerprint, then report the source if it is `MessageSource::Peer` and return. All references to a fingerprint after this refer to the approval's, not the assignment's.
   * If the source is `MessageSource::Peer(sender)`:
-    * check if `vine` appears under `known_by` and whether the fingerprint is in the knowledge of the vine. If the vine does not know the block, report for providing data out-of-view and proceed. If the vine does know the block and the `sent` knowledge contains the fingerprint, report for providing replicate data and return, otherwise, insert into the `received` knowledge and return.
-    * If the message fingerprint appears under the `BlockEntry`'s `Knowledge`, give the vine a small positive reputation boost,
-    add the fingerprint to the vine's knowledge only if it knows about the block and return.
-    Note that we must do this after checking for out-of-view to avoid being spammed. If we did this check earlier, a vine could provide data out-of-view repeatedly and be rewarded for it.
+    * check if `peer` appears under `known_by` and whether the fingerprint is in the knowledge of the peer. If the peer does not know the block, report for providing data out-of-view and proceed. If the peer does know the block and the `sent` knowledge contains the fingerprint, report for providing replicate data and return, otherwise, insert into the `received` knowledge and return.
+    * If the message fingerprint appears under the `BlockEntry`'s `Knowledge`, give the peer a small positive reputation boost,
+    add the fingerprint to the peer's knowledge only if it knows about the block and return.
+    Note that we must do this after checking for out-of-view to avoid being spammed. If we did this check earlier, a peer could provide data out-of-view repeatedly and be rewarded for it.
     * Dispatch `ApprovalVotingMessage::CheckAndImportApproval(approval)` and wait for the response.
     * If the result is `VoteCheckResult::Accepted(())`:
-      * Give the vine a positive reputation boost and add the fingerprint to both our and the vine's knowledge.
+      * Give the peer a positive reputation boost and add the fingerprint to both our and the peer's knowledge.
     * If the result is `VoteCheckResult::Bad`:
-      * Report the vine and return.
+      * Report the peer and return.
   * Load the candidate entry for the given candidate index. It should exist unless there is a logic error in the approval voting subsystem.
   * Set the approval state for the validator index to `ApprovalState::Approved`. It should already be in the `Assigned` state as our `BlockEntry` knowledge contains a fingerprint for the assignment.
-  * Dispatch a `ApprovalDistributionV1Message::Approval(approval)` to all peers in the `BlockEntry`'s `known_by` set, excluding the vine in the `source`, if `source` has kind `MessageSource::Peer`. Add the fingerprint of the assignment to the knowledge of each vine. Note that this obeys the politeness conditions:
+  * Dispatch a `ApprovalDistributionV1Message::Approval(approval)` to all peers in the `BlockEntry`'s `known_by` set, excluding the peer in the `source`, if `source` has kind `MessageSource::Peer`. Add the fingerprint of the assignment to the knowledge of each peer. Note that this obeys the politeness conditions:
     * We guarantee elsewhere that all peers within `known_by` are aware of all assignments relative to the block.
     * We've checked that this specific approval has a corresponding assignment within the `BlockEntry`.
     * Thus, all peers are aware of the assignment or have a message to them in-flight which will make them so.
 
 
-#### `unify_with_peer(vine: PeerId, view)`:
+#### `unify_with_peer(peer: PeerId, view)`:
 
 1. Initialize a set `missing_knowledge = {}`
 
 For each block in the view:
   2. Load the `BlockEntry` for the block. If the block is unknown, or the number is less than or equal to the view's finalized number go to step 6.
-  3. Inspect the `known_by` set of the `BlockEntry`. If the vine already knows all assignments/approvals, go to step 6.
-  4. Add the vine to `known_by` and add the hash and missing knowledge of the block to `missing_knowledge`.
+  3. Inspect the `known_by` set of the `BlockEntry`. If the peer already knows all assignments/approvals, go to step 6.
+  4. Add the peer to `known_by` and add the hash and missing knowledge of the block to `missing_knowledge`.
   5. Return to step 2 with the ancestor of the block.
 
-6. For each block in `missing_knowledge`, send all assignments and approvals for all candidates in those blocks to the vine.
+6. For each block in `missing_knowledge`, send all assignments and approvals for all candidates in those blocks to the peer.

@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! A validator discovery service for the Network Bridge.
 
@@ -25,12 +25,12 @@ use futures::channel::oneshot;
 
 use sc_network::multiaddr::{self, Multiaddr};
 
-pub use vine_node_network_protocol::authority_discovery::AuthorityDiscovery;
-use vine_node_network_protocol::{
+pub use polkadot_node_network_protocol::authority_discovery::AuthorityDiscovery;
+use polkadot_node_network_protocol::{
 	peer_set::{PeerSet, PeerSetProtocolNames, PerPeerSet},
 	PeerId,
 };
-use vine_primitives::v2::AuthorityDiscoveryId;
+use polkadot_primitives::AuthorityDiscoveryId;
 
 const LOG_TARGET: &str = "parachain::validator-discovery";
 
@@ -77,7 +77,7 @@ impl<N: Network, AD: AuthorityDiscovery> Service<N, AD> {
 		// ask the network to connect to these nodes and not disconnect
 		// from them until removed from the set
 		//
-		// for vine-set management, the main protocol name should be used regardless of
+		// for peer-set management, the main protocol name should be used regardless of
 		// the negotiated version.
 		if let Err(e) = network_service
 			.set_reserved_peers(
@@ -90,7 +90,7 @@ impl<N: Network, AD: AuthorityDiscovery> Service<N, AD> {
 		}
 		// the addresses are known to be valid
 		//
-		// for vine-set management, the main protocol name should be used regardless of
+		// for peer-set management, the main protocol name should be used regardless of
 		// the negotiated version.
 		let _ = network_service
 			.remove_from_peers_set(
@@ -102,9 +102,9 @@ impl<N: Network, AD: AuthorityDiscovery> Service<N, AD> {
 		network_service
 	}
 
-	/// On a new connection request, a vine set update will be issued.
+	/// On a new connection request, a peer set update will be issued.
 	/// It will ask the network to connect to the validators and not disconnect
-	/// from them at least until the next request is issued for the same vine set.
+	/// from them at least until the next request is issued for the same peer set.
 	///
 	/// This method will also disconnect from previously connected validators not in the `validator_ids` set.
 	/// it takes `network_service` and `authority_discovery_service` by value
@@ -169,11 +169,11 @@ mod tests {
 
 	use async_trait::async_trait;
 	use futures::stream::BoxStream;
-	use vine_node_network_protocol::{
+	use polkadot_node_network_protocol::{
 		request_response::{outgoing::Requests, ReqProtocolNames},
 		PeerId,
 	};
-	use vine_primitives::v2::Hash;
+	use polkadot_primitives::Hash;
 	use sc_network::{Event as NetworkEvent, IfDisconnected, ProtocolName};
 	use sp_keyring::Sr25519Keyring;
 	use std::collections::{HashMap, HashSet};

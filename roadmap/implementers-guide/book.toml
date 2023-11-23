@@ -3,7 +3,7 @@ authors = ["Rob Habermeier", "Peter Goodspeed-Niklaus"]
 language = "en"
 multilingual = false
 src = "src"
-title = "The vine Parachain Host Implementers' Guide"
+title = "The Polkadot Parachain Host Implementers' Guide"
 
 [preprocessor.graphviz]
 command = "mdbook-graphviz"
@@ -17,6 +17,6 @@ renderer = ["html"]
 additional-css = ["last-changed.css"]
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 # Repository URL used in the last-changed link.
-git-repository-url = "https://github.com/paritytech/vine"
+git-repository-url = "https://github.com/paritytech/polkadot"
 
 [output.linkcheck]

@@ -3,10 +3,14 @@ timeout = 1000
 
 [relaychain]
 default_image = "{{ZOMBIENET_INTEGRATION_TEST_IMAGE}}"
-
-command = "vine"
+chain = "rococo-local"
+command = "polkadot"
 
 [[relaychain.node_groups]]
 name = "validator"
-count = 4
+count = 3
+args = ["--log=beefy=debug", "--beefy", "--enable-offchain-indexing=true"]
+
+[[relaychain.nodes]]
+name = "validator-unstable"
 args = ["--log=beefy=debug", "--beefy", "--enable-offchain-indexing=true"]

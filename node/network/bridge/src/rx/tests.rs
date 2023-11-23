@@ -1,23 +1,23 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 use futures::{channel::oneshot, executor, stream::BoxStream};
-use vine_node_network_protocol::{self as net_protocol, OurView};
-use vine_node_subsystem::{messages::NetworkBridgeEvent, ActivatedLeaf};
+use polkadot_node_network_protocol::{self as net_protocol, OurView};
+use polkadot_node_subsystem::{messages::NetworkBridgeEvent, ActivatedLeaf};
 
 use assert_matches::assert_matches;
 use async_trait::async_trait;
@@ -29,12 +29,12 @@ use std::{
 
 use sc_network::{Event as NetworkEvent, IfDisconnected, ProtocolName};
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	peer_set::PeerSetProtocolNames,
 	request_response::{outgoing::Requests, ReqProtocolNames},
 	view, ObservedRole, Versioned,
 };
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{
 		AllMessages, ApprovalDistributionMessage, BitfieldDistributionMessage,
@@ -42,11 +42,11 @@ use vine_node_subsystem::{
 	},
 	ActiveLeavesUpdate, FromOrchestra, LeafStatus, OverseerSignal,
 };
-use vine_node_subsystem_test_helpers::{
+use polkadot_node_subsystem_test_helpers::{
 	SingleItemSink, SingleItemStream, TestSubsystemContextHandle,
 };
-use vine_node_subsystem_util::metered;
-use vine_primitives::v2::{AuthorityDiscoveryId, Hash};
+use polkadot_node_subsystem_util::metered;
+use polkadot_primitives::{AuthorityDiscoveryId, Hash};
 
 use sc_network::Multiaddr;
 use sp_keyring::Sr25519Keyring;
@@ -55,11 +55,11 @@ use crate::{network::Network, validator_discovery::AuthorityDiscovery, Rep};
 
 #[derive(Debug, PartialEq)]
 pub enum NetworkAction {
-	/// Note a change in reputation for a vine.
+	/// Note a change in reputation for a peer.
 	ReputationChange(PeerId, Rep),
-	/// Disconnect a vine from the given vine-set.
+	/// Disconnect a peer from the given peer-set.
 	DisconnectPeer(PeerId, PeerSet),
-	/// Write a notification to a given vine on the given vine-set.
+	/// Write a notification to a given peer on the given peer-set.
 	WriteNotification(PeerId, PeerSet, Vec<u8>),
 }
 
@@ -85,7 +85,7 @@ struct TestNetworkHandle {
 fn new_test_network(
 	protocol_names: PeerSetProtocolNames,
 ) -> (TestNetwork, TestNetworkHandle, TestAuthorityDiscovery) {
-	let (net_tx, net_rx) = vine_node_subsystem_test_helpers::single_item_sink();
+	let (net_tx, net_rx) = polkadot_node_subsystem_test_helpers::single_item_sink();
 	let (action_tx, action_rx) = metered::unbounded();
 
 	(
@@ -189,27 +189,28 @@ impl TestNetworkHandle {
 		v
 	}
 
-	async fn connect_peer(&mut self, vine: PeerId, peer_set: PeerSet, role: ObservedRole) {
+	async fn connect_peer(&mut self, peer: PeerId, peer_set: PeerSet, role: ObservedRole) {
 		self.send_network_event(NetworkEvent::NotificationStreamOpened {
-			remote: vine,
+			remote: peer,
 			protocol: self.protocol_names.get_main_name(peer_set),
 			negotiated_fallback: None,
 			role: role.into(),
+			received_handshake: vec![],
 		})
 		.await;
 	}
 
-	async fn disconnect_peer(&mut self, vine: PeerId, peer_set: PeerSet) {
+	async fn disconnect_peer(&mut self, peer: PeerId, peer_set: PeerSet) {
 		self.send_network_event(NetworkEvent::NotificationStreamClosed {
-			remote: vine,
+			remote: peer,
 			protocol: self.protocol_names.get_main_name(peer_set),
 		})
 		.await;
 	}
 
-	async fn peer_message(&mut self, vine: PeerId, peer_set: PeerSet, message: Vec<u8>) {
+	async fn peer_message(&mut self, peer: PeerId, peer_set: PeerSet, message: Vec<u8>) {
 		self.send_network_event(NetworkEvent::NotificationsReceived {
-			remote: vine,
+			remote: peer,
 			messages: vec![(self.protocol_names.get_main_name(peer_set), message.into())],
 		})
 		.await;
@@ -303,7 +304,7 @@ fn test_harness<T: Future<Output = VirtualOverseer>>(
 	let pool = sp_core::testing::TaskExecutor::new();
 	let (mut network, network_handle, discovery) = new_test_network(peerset_protocol_names.clone());
 	let (context, virtual_overseer) =
-		vine_node_subsystem_test_helpers::make_subsystem_context(pool);
+		polkadot_node_subsystem_test_helpers::make_subsystem_context(pool);
 	let network_stream = network.event_stream();
 
 	let bridge = NetworkBridgeRx {
@@ -387,7 +388,7 @@ fn send_our_view_upon_connection() {
 	test_harness(Box::new(oracle), |test_harness| async move {
 		let TestHarness { mut network_handle, mut virtual_overseer } = test_harness;
 
-		let vine = PeerId::random();
+		let peer = PeerId::random();
 
 		let head = Hash::repeat_byte(1);
 		virtual_overseer
@@ -404,10 +405,10 @@ fn send_our_view_upon_connection() {
 		handle.await_mode_switch().await;
 
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Validation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Validation, ObservedRole::Full)
 			.await;
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Collation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Collation, ObservedRole::Full)
 			.await;
 
 		let view = view![head];
@@ -415,7 +416,7 @@ fn send_our_view_upon_connection() {
 		assert_network_actions_contains(
 			&actions,
 			&NetworkAction::WriteNotification(
-				vine.clone(),
+				peer.clone(),
 				PeerSet::Validation,
 				WireMessage::<protocol_v1::ValidationProtocol>::ViewUpdate(view.clone()).encode(),
 			),
@@ -423,7 +424,7 @@ fn send_our_view_upon_connection() {
 		assert_network_actions_contains(
 			&actions,
 			&NetworkAction::WriteNotification(
-				vine.clone(),
+				peer.clone(),
 				PeerSet::Collation,
 				WireMessage::<protocol_v1::CollationProtocol>::ViewUpdate(view.clone()).encode(),
 			),
@@ -661,10 +662,10 @@ fn peer_view_updates_sent_via_overseer() {
 	test_harness(done_syncing_oracle(), |test_harness| async move {
 		let TestHarness { mut network_handle, mut virtual_overseer } = test_harness;
 
-		let vine = PeerId::random();
+		let peer = PeerId::random();
 
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Validation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Validation, ObservedRole::Full)
 			.await;
 
 		let view = view![Hash::repeat_byte(1)];
@@ -673,7 +674,7 @@ fn peer_view_updates_sent_via_overseer() {
 		{
 			assert_sends_validation_event_to_all(
 				NetworkBridgeEvent::PeerConnected(
-					vine.clone(),
+					peer.clone(),
 					ObservedRole::Full,
 					ValidationVersion::V1.into(),
 					None,
@@ -683,7 +684,7 @@ fn peer_view_updates_sent_via_overseer() {
 			.await;
 
 			assert_sends_validation_event_to_all(
-				NetworkBridgeEvent::PeerViewChange(vine.clone(), View::default()),
+				NetworkBridgeEvent::PeerViewChange(peer.clone(), View::default()),
 				&mut virtual_overseer,
 			)
 			.await;
@@ -691,14 +692,14 @@ fn peer_view_updates_sent_via_overseer() {
 
 		network_handle
 			.peer_message(
-				vine.clone(),
+				peer.clone(),
 				PeerSet::Validation,
 				WireMessage::<protocol_v1::ValidationProtocol>::ViewUpdate(view.clone()).encode(),
 			)
 			.await;
 
 		assert_sends_validation_event_to_all(
-			NetworkBridgeEvent::PeerViewChange(vine.clone(), view),
+			NetworkBridgeEvent::PeerViewChange(peer.clone(), view),
 			&mut virtual_overseer,
 		)
 		.await;
@@ -711,17 +712,17 @@ fn peer_messages_sent_via_overseer() {
 	test_harness(done_syncing_oracle(), |test_harness| async move {
 		let TestHarness { mut network_handle, mut virtual_overseer } = test_harness;
 
-		let vine = PeerId::random();
+		let peer = PeerId::random();
 
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Validation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Validation, ObservedRole::Full)
 			.await;
 
 		// bridge will inform about all connected peers.
 		{
 			assert_sends_validation_event_to_all(
 				NetworkBridgeEvent::PeerConnected(
-					vine.clone(),
+					peer.clone(),
 					ObservedRole::Full,
 					ValidationVersion::V1.into(),
 					None,
@@ -731,7 +732,7 @@ fn peer_messages_sent_via_overseer() {
 			.await;
 
 			assert_sends_validation_event_to_all(
-				NetworkBridgeEvent::PeerViewChange(vine.clone(), View::default()),
+				NetworkBridgeEvent::PeerViewChange(peer.clone(), View::default()),
 				&mut virtual_overseer,
 			)
 			.await;
@@ -746,13 +747,13 @@ fn peer_messages_sent_via_overseer() {
 
 		network_handle
 			.peer_message(
-				vine.clone(),
+				peer.clone(),
 				PeerSet::Validation,
 				WireMessage::ProtocolMessage(message_v1.clone()).encode(),
 			)
 			.await;
 
-		network_handle.disconnect_peer(vine.clone(), PeerSet::Validation).await;
+		network_handle.disconnect_peer(peer.clone(), PeerSet::Validation).await;
 
 		// Approval distribution message comes first, and the message is only sent to that subsystem.
 		// then a disconnection event arises that is sent to all validation networking subsystems.
@@ -764,13 +765,13 @@ fn peer_messages_sent_via_overseer() {
 					NetworkBridgeEvent::PeerMessage(p, Versioned::V1(m))
 				)
 			) => {
-				assert_eq!(p, vine);
+				assert_eq!(p, peer);
 				assert_eq!(m, approval_distribution_message);
 			}
 		);
 
 		assert_sends_validation_event_to_all(
-			NetworkBridgeEvent::PeerDisconnected(vine),
+			NetworkBridgeEvent::PeerDisconnected(peer),
 			&mut virtual_overseer,
 		)
 		.await;
@@ -783,20 +784,20 @@ fn peer_disconnect_from_just_one_peerset() {
 	test_harness(done_syncing_oracle(), |test_harness| async move {
 		let TestHarness { mut network_handle, mut virtual_overseer } = test_harness;
 
-		let vine = PeerId::random();
+		let peer = PeerId::random();
 
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Validation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Validation, ObservedRole::Full)
 			.await;
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Collation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Collation, ObservedRole::Full)
 			.await;
 
 		// bridge will inform about all connected peers.
 		{
 			assert_sends_validation_event_to_all(
 				NetworkBridgeEvent::PeerConnected(
-					vine.clone(),
+					peer.clone(),
 					ObservedRole::Full,
 					ValidationVersion::V1.into(),
 					None,
@@ -806,7 +807,7 @@ fn peer_disconnect_from_just_one_peerset() {
 			.await;
 
 			assert_sends_validation_event_to_all(
-				NetworkBridgeEvent::PeerViewChange(vine.clone(), View::default()),
+				NetworkBridgeEvent::PeerViewChange(peer.clone(), View::default()),
 				&mut virtual_overseer,
 			)
 			.await;
@@ -815,7 +816,7 @@ fn peer_disconnect_from_just_one_peerset() {
 		{
 			assert_sends_collation_event_to_all(
 				NetworkBridgeEvent::PeerConnected(
-					vine.clone(),
+					peer.clone(),
 					ObservedRole::Full,
 					ValidationVersion::V1.into(),
 					None,
@@ -825,16 +826,16 @@ fn peer_disconnect_from_just_one_peerset() {
 			.await;
 
 			assert_sends_collation_event_to_all(
-				NetworkBridgeEvent::PeerViewChange(vine.clone(), View::default()),
+				NetworkBridgeEvent::PeerViewChange(peer.clone(), View::default()),
 				&mut virtual_overseer,
 			)
 			.await;
 		}
 
-		network_handle.disconnect_peer(vine.clone(), PeerSet::Validation).await;
+		network_handle.disconnect_peer(peer.clone(), PeerSet::Validation).await;
 
 		assert_sends_validation_event_to_all(
-			NetworkBridgeEvent::PeerDisconnected(vine.clone()),
+			NetworkBridgeEvent::PeerDisconnected(peer.clone()),
 			&mut virtual_overseer,
 		)
 		.await;
@@ -861,7 +862,7 @@ fn peer_disconnect_from_just_one_peerset() {
 		assert_network_actions_contains(
 			&actions,
 			&NetworkAction::WriteNotification(
-				vine.clone(),
+				peer.clone(),
 				PeerSet::Collation,
 				wire_message.clone(),
 			),
@@ -924,7 +925,7 @@ fn relays_collation_protocol_messages() {
 			.await;
 		}
 
-		// vine A gets reported for sending a collation message.
+		// peer A gets reported for sending a collation message.
 
 		let collator_protocol_message = protocol_v1::CollatorProtocolMessage::Declare(
 			Sr25519Keyring::Alice.public().into(),
@@ -949,7 +950,7 @@ fn relays_collation_protocol_messages() {
 			&NetworkAction::ReputationChange(peer_a.clone(), UNCONNECTED_PEERSET_COST),
 		);
 
-		// vine B has the message relayed.
+		// peer B has the message relayed.
 
 		network_handle
 			.peer_message(
@@ -979,20 +980,20 @@ fn different_views_on_different_peer_sets() {
 	test_harness(done_syncing_oracle(), |test_harness| async move {
 		let TestHarness { mut network_handle, mut virtual_overseer } = test_harness;
 
-		let vine = PeerId::random();
+		let peer = PeerId::random();
 
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Validation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Validation, ObservedRole::Full)
 			.await;
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Collation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Collation, ObservedRole::Full)
 			.await;
 
 		// bridge will inform about all connected peers.
 		{
 			assert_sends_validation_event_to_all(
 				NetworkBridgeEvent::PeerConnected(
-					vine.clone(),
+					peer.clone(),
 					ObservedRole::Full,
 					ValidationVersion::V1.into(),
 					None,
@@ -1002,7 +1003,7 @@ fn different_views_on_different_peer_sets() {
 			.await;
 
 			assert_sends_validation_event_to_all(
-				NetworkBridgeEvent::PeerViewChange(vine.clone(), View::default()),
+				NetworkBridgeEvent::PeerViewChange(peer.clone(), View::default()),
 				&mut virtual_overseer,
 			)
 			.await;
@@ -1011,7 +1012,7 @@ fn different_views_on_different_peer_sets() {
 		{
 			assert_sends_collation_event_to_all(
 				NetworkBridgeEvent::PeerConnected(
-					vine.clone(),
+					peer.clone(),
 					ObservedRole::Full,
 					ValidationVersion::V1.into(),
 					None,
@@ -1021,7 +1022,7 @@ fn different_views_on_different_peer_sets() {
 			.await;
 
 			assert_sends_collation_event_to_all(
-				NetworkBridgeEvent::PeerViewChange(vine.clone(), View::default()),
+				NetworkBridgeEvent::PeerViewChange(peer.clone(), View::default()),
 				&mut virtual_overseer,
 			)
 			.await;
@@ -1032,7 +1033,7 @@ fn different_views_on_different_peer_sets() {
 
 		network_handle
 			.peer_message(
-				vine.clone(),
+				peer.clone(),
 				PeerSet::Validation,
 				WireMessage::<protocol_v1::ValidationProtocol>::ViewUpdate(view_a.clone()).encode(),
 			)
@@ -1040,20 +1041,20 @@ fn different_views_on_different_peer_sets() {
 
 		network_handle
 			.peer_message(
-				vine.clone(),
+				peer.clone(),
 				PeerSet::Collation,
 				WireMessage::<protocol_v1::CollationProtocol>::ViewUpdate(view_b.clone()).encode(),
 			)
 			.await;
 
 		assert_sends_validation_event_to_all(
-			NetworkBridgeEvent::PeerViewChange(vine.clone(), view_a.clone()),
+			NetworkBridgeEvent::PeerViewChange(peer.clone(), view_a.clone()),
 			&mut virtual_overseer,
 		)
 		.await;
 
 		assert_sends_collation_event_to_all(
-			NetworkBridgeEvent::PeerViewChange(vine.clone(), view_b.clone()),
+			NetworkBridgeEvent::PeerViewChange(peer.clone(), view_b.clone()),
 			&mut virtual_overseer,
 		)
 		.await;

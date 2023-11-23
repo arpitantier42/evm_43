@@ -1,29 +1,29 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! The Network Bridge Subsystem - handles _outgoing_ messages, from subsystem to the network.
 use super::*;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	peer_set::{CollationVersion, PeerSet, PeerSetProtocolNames, ValidationVersion},
 	request_response::ReqProtocolNames,
 	v1 as protocol_v1, PeerId, Versioned,
 };
 
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	errors::SubsystemError, messages::NetworkBridgeTxMessage, overseer, FromOrchestra,
 	OverseerSignal, SpawnedSubsystem,
 };
@@ -31,7 +31,7 @@ use vine_node_subsystem::{
 /// Peer set info for network initialization.
 ///
 /// To be added to [`NetworkConfiguration::extra_sets`].
-pub use vine_node_network_protocol::peer_set::{peer_sets_info, IsAuthority};
+pub use polkadot_node_network_protocol::peer_set::{peer_sets_info, IsAuthority};
 
 use crate::validator_discovery;
 
@@ -148,25 +148,25 @@ where
 	AD: validator_discovery::AuthorityDiscovery + Clone,
 {
 	match msg {
-		NetworkBridgeTxMessage::ReportPeer(vine, rep) => {
+		NetworkBridgeTxMessage::ReportPeer(peer, rep) => {
 			if !rep.is_benefit() {
-				gum::debug!(target: LOG_TARGET, ?vine, ?rep, action = "ReportPeer");
+				gum::debug!(target: LOG_TARGET, ?peer, ?rep, action = "ReportPeer");
 			}
 
 			metrics.on_report_event();
-			network_service.report_peer(vine, rep);
+			network_service.report_peer(peer, rep);
 		},
-		NetworkBridgeTxMessage::DisconnectPeer(vine, peer_set) => {
+		NetworkBridgeTxMessage::DisconnectPeer(peer, peer_set) => {
 			gum::trace!(
 				target: LOG_TARGET,
 				action = "DisconnectPeer",
-				?vine,
+				?peer,
 				peer_set = ?peer_set,
 			);
 
 			// [`NetworkService`] keeps track of the protocols by their main name.
 			let protocol = peerset_protocol_names.get_main_name(peer_set);
-			network_service.disconnect_peer(vine, protocol);
+			network_service.disconnect_peer(peer, protocol);
 		},
 		NetworkBridgeTxMessage::SendValidationMessage(peers, msg) => {
 			gum::trace!(

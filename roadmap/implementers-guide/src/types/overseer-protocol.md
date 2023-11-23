@@ -86,7 +86,7 @@ enum AssignmentCheckResult {
     AcceptedDuplicate,
     // The vote was valid but too far in the future to accept right now.
     TooFarInFuture,
-    // The vote was bad and should be ignored, reporting the vine who propagated it.
+    // The vote was bad and should be ignored, reporting the peer who propagated it.
     Bad(AssignmentCheckError),
 }
 
@@ -102,7 +102,7 @@ pub enum AssignmentCheckError {
 enum ApprovalCheckResult {
     // The vote was accepted and should be propagated onwards.
     Accepted,
-    // The vote was bad and should be ignored, reporting the vine who propagated it.
+    // The vote was bad and should be ignored, reporting the peer who propagated it.
     Bad(ApprovalCheckError),
 }
 
@@ -308,8 +308,9 @@ enum CandidateBackingMessage {
   /// given relay-parent (ref. by hash). This candidate must be validated using the provided PoV.
   /// The PoV is expected to match the `pov_hash` in the descriptor.
   Second(Hash, CandidateReceipt, PoV),
-  /// Note a vine validator's statement about a particular candidate. Disagreements about validity must be escalated
-  /// to a broader check by Misbehavior Arbitration. Agreements are simply tallied until a quorum is reached.
+  /// Note a peer validator's statement about a particular candidate. Disagreements about validity must be escalated
+  /// to a broader check by the Disputes Subsystem, though that escalation is deferred until the approval voting 
+  /// stage to guarantee availability. Agreements are simply tallied until a quorum is reached.
   Statement(Statement),
 }
 ```
@@ -468,9 +469,9 @@ enum DisputeCoordinatorMessage {
 
 /// Result of `ImportStatements`.
 pub enum ImportStatementsResult {
-	/// Import was invalid (candidate was not available)  and the sending vine should get banned.
+	/// Import was invalid (candidate was not available)  and the sending peer should get banned.
 	InvalidImport,
-	/// Import was valid and can be confirmed to vine.
+	/// Import was valid and can be confirmed to peer.
 	ValidImport
 }
 ```
@@ -511,18 +512,18 @@ to the low-level networking code.
 ```rust
 /// Peer-sets handled by the network bridge.
 enum PeerSet {
-    /// The collation vine-set is used to distribute collations from collators to validators.
+    /// The collation peer-set is used to distribute collations from collators to validators.
     Collation,
-    /// The validation vine-set is used to distribute information relevant to parachain
+    /// The validation peer-set is used to distribute information relevant to parachain
     /// validation among validators. This may include nodes which are not validators,
-    /// as some protocols on this vine-set are expected to be gossip.
+    /// as some protocols on this peer-set are expected to be gossip.
     Validation,
 }
 
 enum NetworkBridgeMessage {
-    /// Report a cost or benefit of a vine. Negative values are costs, positive are benefits.
+    /// Report a cost or benefit of a peer. Negative values are costs, positive are benefits.
     ReportPeer(PeerId, cost_benefit: i32),
-    /// Disconnect a vine from the given vine-set without affecting their reputation.
+    /// Disconnect a peer from the given peer-set without affecting their reputation.
     DisconnectPeer(PeerId, PeerSet),
     /// Send a message to one or more peers on the validation peerset.
     SendValidationMessage([PeerId], ValidationProtocolV1),

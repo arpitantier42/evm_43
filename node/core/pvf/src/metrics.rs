@@ -1,22 +1,23 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Prometheus metrics related to the validation host.
 
-use vine_node_metrics::metrics::{self, prometheus};
+use crate::prepare::MemoryStats;
+use polkadot_node_metrics::metrics::{self, prometheus};
 
 /// Validation host metrics.
 #[derive(Default, Clone)]
@@ -72,6 +73,27 @@ impl Metrics {
 	pub(crate) fn time_execution(&self) -> Option<metrics::prometheus::prometheus::HistogramTimer> {
 		self.0.as_ref().map(|metrics| metrics.execution_time.start_timer())
 	}
+
+	/// Observe memory stats for preparation.
+	#[allow(unused_variables)]
+	pub(crate) fn observe_preparation_memory_metrics(&self, memory_stats: MemoryStats) {
+		if let Some(metrics) = &self.0 {
+			#[cfg(target_os = "linux")]
+			if let Some(max_rss) = memory_stats.max_rss {
+				metrics.preparation_max_rss.observe(max_rss as f64);
+			}
+
+			#[cfg(any(target_os = "linux", feature = "jemalloc-allocator"))]
+			if let Some(tracker_stats) = memory_stats.memory_tracker_stats {
+				// We convert these stats from B to KB to match the unit of `ru_maxrss` from `getrusage`.
+				let max_resident_kb = (tracker_stats.resident / 1024) as f64;
+				let max_allocated_kb = (tracker_stats.allocated / 1024) as f64;
+
+				metrics.preparation_max_resident.observe(max_resident_kb);
+				metrics.preparation_max_allocated.observe(max_allocated_kb);
+			}
+		}
+	}
 }
 
 #[derive(Clone)]
@@ -85,6 +107,12 @@ struct MetricsInner {
 	execute_finished: prometheus::Counter<prometheus::U64>,
 	preparation_time: prometheus::Histogram,
 	execution_time: prometheus::Histogram,
+	#[cfg(target_os = "linux")]
+	preparation_max_rss: prometheus::Histogram,
+	#[cfg(any(target_os = "linux", feature = "jemalloc-allocator"))]
+	preparation_max_allocated: prometheus::Histogram,
+	#[cfg(any(target_os = "linux", feature = "jemalloc-allocator"))]
+	preparation_max_resident: prometheus::Histogram,
 }
 
 impl metrics::Metrics for Metrics {
@@ -93,7 +121,7 @@ impl metrics::Metrics for Metrics {
 			worker_spawning: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"peer_pvf_worker_spawning",
+						"polkadot_pvf_worker_spawning",
 						"The total number of workers began to spawn",
 					),
 					&["flavor"],
@@ -103,7 +131,7 @@ impl metrics::Metrics for Metrics {
 			worker_spawned: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"peer_pvf_worker_spawned",
+						"polkadot_pvf_worker_spawned",
 						"The total number of workers spawned successfully",
 					),
 					&["flavor"],
@@ -113,7 +141,7 @@ impl metrics::Metrics for Metrics {
 			worker_retired: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"peer_pvf_worker_retired",
+						"polkadot_pvf_worker_retired",
 						"The total number of workers retired, either killed by the host or died on duty",
 					),
 					&["flavor"],
@@ -122,28 +150,28 @@ impl metrics::Metrics for Metrics {
 			)?,
 			prepare_enqueued: prometheus::register(
 				prometheus::Counter::new(
-					"peer_pvf_prepare_enqueued",
+					"polkadot_pvf_prepare_enqueued",
 					"The total number of jobs enqueued into the preparation pipeline"
 				)?,
 				registry,
 			)?,
 			prepare_concluded: prometheus::register(
 				prometheus::Counter::new(
-					"peer_pvf_prepare_concluded",
+					"polkadot_pvf_prepare_concluded",
 					"The total number of jobs concluded in the preparation pipeline"
 				)?,
 				registry,
 			)?,
 			execute_enqueued: prometheus::register(
 				prometheus::Counter::new(
-					"peer_pvf_execute_enqueued",
+					"polkadot_pvf_execute_enqueued",
 					"The total number of jobs enqueued into the execution pipeline"
 				)?,
 				registry,
 			)?,
 			execute_finished: prometheus::register(
 				prometheus::Counter::new(
-					"peer_pvf_execute_finished",
+					"polkadot_pvf_execute_finished",
 					"The total number of jobs done in the execution pipeline"
 				)?,
 				registry,
@@ -151,13 +179,13 @@ impl metrics::Metrics for Metrics {
 			preparation_time: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"peer_pvf_preparation_time",
+						"polkadot_pvf_preparation_time",
 						"Time spent in preparing PVF artifacts in seconds",
 					)
 					.buckets(vec![
-						// This is synchronized with the PRECHECK_PREPARATION_TIMEOUT=60s
-						// and LENIENT_PREPARATION_TIMEOUT=360s constants found in
-						// src/prepare/worker.rs
+						// This is synchronized with the `DEFAULT_PRECHECK_PREPARATION_TIMEOUT=60s`
+						// and `DEFAULT_LENIENT_PREPARATION_TIMEOUT=360s` constants found in
+						// node/core/candidate-validation/src/lib.rs
 						0.1,
 						0.5,
 						1.0,
@@ -178,11 +206,12 @@ impl metrics::Metrics for Metrics {
 			execution_time: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"peer_pvf_execution_time",
+						"polkadot_pvf_execution_time",
 						"Time spent in executing PVFs",
 					).buckets(vec![
-						// This is synchronized with `APPROVAL_EXECUTION_TIMEOUT`  and
-						// `BACKING_EXECUTION_TIMEOUT` constants in `node/primitives/src/lib.rs`
+						// This is synchronized with `DEFAULT_APPROVAL_EXECUTION_TIMEOUT` and
+						// `DEFAULT_BACKING_EXECUTION_TIMEOUT` constants in
+						// node/core/candidate-validation/src/lib.rs
 						0.01,
 						0.025,
 						0.05,
@@ -199,6 +228,45 @@ impl metrics::Metrics for Metrics {
 						10.0,
 						12.0,
 					]),
+				)?,
+				registry,
+			)?,
+			#[cfg(target_os = "linux")]
+			preparation_max_rss: prometheus::register(
+				prometheus::Histogram::with_opts(
+					prometheus::HistogramOpts::new(
+						"polkadot_pvf_preparation_max_rss",
+						"ru_maxrss (maximum resident set size) observed for preparation (in kilobytes)",
+					).buckets(
+						prometheus::exponential_buckets(8192.0, 2.0, 10)
+							.expect("arguments are always valid; qed"),
+					),
+				)?,
+				registry,
+			)?,
+			#[cfg(any(target_os = "linux", feature = "jemalloc-allocator"))]
+			preparation_max_resident: prometheus::register(
+				prometheus::Histogram::with_opts(
+					prometheus::HistogramOpts::new(
+						"polkadot_pvf_preparation_max_resident",
+						"max resident memory observed for preparation (in kilobytes)",
+					).buckets(
+						prometheus::exponential_buckets(8192.0, 2.0, 10)
+							.expect("arguments are always valid; qed"),
+					),
+				)?,
+				registry,
+			)?,
+			#[cfg(any(target_os = "linux", feature = "jemalloc-allocator"))]
+			preparation_max_allocated: prometheus::register(
+				prometheus::Histogram::with_opts(
+					prometheus::HistogramOpts::new(
+						"polkadot_pvf_preparation_max_allocated",
+						"max allocated memory observed for preparation (in kilobytes)",
+					).buckets(
+						prometheus::exponential_buckets(8192.0, 2.0, 10)
+							.expect("arguments are always valid; qed"),
+					),
 				)?,
 				registry,
 			)?,

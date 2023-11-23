@@ -1,28 +1,28 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{collections::HashMap, time::Instant};
 
 use gum::CandidateHash;
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	request_response::{incoming::OutgoingResponseSender, v1::DisputeRequest},
 	PeerId,
 };
-use vine_node_primitives::SignedDisputeStatement;
-use vine_primitives::v2::{CandidateReceipt, ValidatorIndex};
+use polkadot_node_primitives::SignedDisputeStatement;
+use polkadot_primitives::{CandidateReceipt, ValidatorIndex};
 
 use crate::receiver::{BATCH_COLLECTING_INTERVAL, MIN_KEEP_BATCH_ALIVE_VOTES};
 
@@ -139,7 +139,7 @@ impl Batch {
 	/// The statements are supposed to be the valid and invalid statements received in a
 	/// `DisputeRequest`.
 	///
-	/// The given `pending_response` is the corresponding response sender for responding to `vine`.
+	/// The given `pending_response` is the corresponding response sender for responding to `peer`.
 	/// If at least one of the votes is new as far as this batch is concerned we record the
 	/// pending_response, for later use. In case both votes are known already, we return the
 	/// response sender as an `Err` value.
@@ -147,7 +147,7 @@ impl Batch {
 		&mut self,
 		valid_vote: (SignedDisputeStatement, ValidatorIndex),
 		invalid_vote: (SignedDisputeStatement, ValidatorIndex),
-		vine: PeerId,
+		peer: PeerId,
 		pending_response: OutgoingResponseSender<DisputeRequest>,
 	) -> Result<(), OutgoingResponseSender<DisputeRequest>> {
 		debug_assert!(valid_vote.0.candidate_hash() == invalid_vote.0.candidate_hash());
@@ -167,7 +167,7 @@ impl Batch {
 		if duplicate {
 			Err(pending_response)
 		} else {
-			self.requesters.push((vine, pending_response));
+			self.requesters.push((peer, pending_response));
 			Ok(())
 		}
 	}

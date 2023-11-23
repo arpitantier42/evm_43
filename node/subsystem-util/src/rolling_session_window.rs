@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! A rolling window of sessions and cached session info, updated by the state of newly imported blocks.
 //!
@@ -23,12 +23,12 @@ use super::database::{DBTransaction, Database};
 use kvdb::{DBKey, DBOp};
 
 use parity_scale_codec::{Decode, Encode};
-pub use vine_node_primitives::{new_session_window_size, SessionWindowSize};
-use vine_primitives::v2::{BlockNumber, Hash, SessionIndex, SessionInfo};
+pub use polkadot_node_primitives::{new_session_window_size, SessionWindowSize};
+use polkadot_primitives::{BlockNumber, Hash, SessionIndex, SessionInfo};
 use std::sync::Arc;
 
 use futures::channel::oneshot;
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	errors::{ChainApiError, RuntimeApiError},
 	messages::{ChainApiMessage, RuntimeApiMessage, RuntimeApiRequest},
 	overseer,
@@ -209,7 +209,7 @@ impl RollingSessionWindow {
 			}?
 		} else {
 			// There are no new sessions to be fetched from chain state.
-			Vec::new()
+			stored_sessions
 		};
 
 		Ok(Self {
@@ -242,7 +242,7 @@ impl RollingSessionWindow {
 	}
 
 	// Saves/Updates all sessions in the database.
-	// TODO: https://github.com/paritytech/vine/issues/6144
+	// TODO: https://github.com/paritytech/polkadot/issues/6144
 	fn db_save(&mut self, stored_window: StoredWindow) {
 		if let Some(db_params) = self.db_params.as_ref() {
 			match db_params.db.write(DBTransaction {
@@ -589,12 +589,12 @@ mod tests {
 	use super::*;
 	use crate::database::kvdb_impl::DbAdapter;
 	use assert_matches::assert_matches;
-	use vine_node_subsystem::{
+	use polkadot_node_subsystem::{
 		messages::{AllMessages, AvailabilityRecoveryMessage},
 		SubsystemContext,
 	};
-	use vine_node_subsystem_test_helpers::make_subsystem_context;
-	use vine_primitives::v2::Header;
+	use polkadot_node_subsystem_test_helpers::make_subsystem_context;
+	use polkadot_primitives::Header;
 	use sp_core::testing::TaskExecutor;
 
 	const SESSION_DATA_COL: u32 = 0;
@@ -940,6 +940,174 @@ mod tests {
 		let actual_window_size = window.session_info.len() as u32;
 
 		cache_session_info_test(0, 3, Some(window), actual_window_size, None);
+	}
+
+	#[test]
+	fn db_load_works() {
+		// Session index of the tip of our fake test chain.
+		let session: SessionIndex = 100;
+		let genesis_session: SessionIndex = 0;
+
+		let header = Header {
+			digest: Default::default(),
+			extrinsics_root: Default::default(),
+			number: 5,
+			state_root: Default::default(),
+			parent_hash: Default::default(),
+		};
+
+		let finalized_header = Header {
+			digest: Default::default(),
+			extrinsics_root: Default::default(),
+			number: 0,
+			state_root: Default::default(),
+			parent_hash: Default::default(),
+		};
+
+		let finalized_header_clone = finalized_header.clone();
+
+		let hash: sp_core::H256 = header.hash();
+		let db_params = dummy_db_params();
+		let db_params_clone = db_params.clone();
+
+		let pool = TaskExecutor::new();
+		let (mut ctx, mut handle) = make_subsystem_context::<(), _>(pool.clone());
+
+		let test_fut = {
+			let sender = ctx.sender().clone();
+			Box::pin(async move {
+				let mut rsw =
+					RollingSessionWindow::new(sender.clone(), hash, db_params_clone).await.unwrap();
+
+				let session_info = rsw.session_info.clone();
+				let earliest_session = rsw.earliest_session();
+
+				assert_eq!(earliest_session, 0);
+				assert_eq!(session_info.len(), 101);
+
+				rsw.db_save(StoredWindow { earliest_session, session_info });
+			})
+		};
+
+		let aux_fut = Box::pin(async move {
+			assert_matches!(
+				handle.recv().await,
+				AllMessages::RuntimeApi(RuntimeApiMessage::Request(
+					h,
+					RuntimeApiRequest::SessionIndexForChild(s_tx),
+				)) => {
+					assert_eq!(h, hash);
+					let _ = s_tx.send(Ok(session));
+				}
+			);
+
+			assert_matches!(
+				handle.recv().await,
+				AllMessages::ChainApi(ChainApiMessage::FinalizedBlockNumber(
+					s_tx,
+				)) => {
+					let _ = s_tx.send(Ok(finalized_header.number));
+				}
+			);
+
+			assert_matches!(
+				handle.recv().await,
+				AllMessages::ChainApi(ChainApiMessage::FinalizedBlockHash(
+					block_number,
+					s_tx,
+				)) => {
+					assert_eq!(block_number, finalized_header.number);
+					let _ = s_tx.send(Ok(Some(finalized_header.hash())));
+				}
+			);
+
+			assert_matches!(
+				handle.recv().await,
+				AllMessages::RuntimeApi(RuntimeApiMessage::Request(
+					h,
+					RuntimeApiRequest::SessionIndexForChild(s_tx),
+				)) => {
+					assert_eq!(h, finalized_header.hash());
+					let _ = s_tx.send(Ok(0));
+				}
+			);
+
+			// Unfinalized chain starts at geneisis block, so session 0 is how far we stretch.
+			for i in genesis_session..=session {
+				assert_matches!(
+					handle.recv().await,
+					AllMessages::RuntimeApi(RuntimeApiMessage::Request(
+						h,
+						RuntimeApiRequest::SessionInfo(j, s_tx),
+					)) => {
+						assert_eq!(h, hash);
+						assert_eq!(i, j);
+						let _ = s_tx.send(Ok(Some(dummy_session_info(i))));
+					}
+				);
+			}
+		});
+
+		futures::executor::block_on(futures::future::join(test_fut, aux_fut));
+
+		let pool = TaskExecutor::new();
+		let (mut ctx, mut handle) = make_subsystem_context::<(), _>(pool.clone());
+
+		let test_fut = {
+			Box::pin(async move {
+				let sender = ctx.sender().clone();
+				let res = RollingSessionWindow::new(sender, hash, db_params).await;
+				let rsw = res.unwrap();
+				assert_eq!(rsw.earliest_session, 0);
+				assert_eq!(rsw.session_info.len(), 101);
+			})
+		};
+
+		let aux_fut = Box::pin(async move {
+			assert_matches!(
+				handle.recv().await,
+				AllMessages::RuntimeApi(RuntimeApiMessage::Request(
+					h,
+					RuntimeApiRequest::SessionIndexForChild(s_tx),
+				)) => {
+					assert_eq!(h, hash);
+					let _ = s_tx.send(Ok(session));
+				}
+			);
+
+			assert_matches!(
+				handle.recv().await,
+				AllMessages::ChainApi(ChainApiMessage::FinalizedBlockNumber(
+					s_tx,
+				)) => {
+					let _ = s_tx.send(Ok(finalized_header_clone.number));
+				}
+			);
+
+			assert_matches!(
+				handle.recv().await,
+				AllMessages::ChainApi(ChainApiMessage::FinalizedBlockHash(
+					block_number,
+					s_tx,
+				)) => {
+					assert_eq!(block_number, finalized_header_clone.number);
+					let _ = s_tx.send(Ok(Some(finalized_header_clone.hash())));
+				}
+			);
+
+			assert_matches!(
+				handle.recv().await,
+				AllMessages::RuntimeApi(RuntimeApiMessage::Request(
+					h,
+					RuntimeApiRequest::SessionIndexForChild(s_tx),
+				)) => {
+					assert_eq!(h, finalized_header_clone.hash());
+					let _ = s_tx.send(Ok(0));
+				}
+			);
+		});
+
+		futures::executor::block_on(futures::future::join(test_fut, aux_fut));
 	}
 
 	#[test]

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Answer requests for availability chunks.
 
@@ -21,13 +21,13 @@ use std::sync::Arc;
 use futures::channel::oneshot;
 
 use fatality::Nested;
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	request_response::{v1, IncomingRequest, IncomingRequestReceiver},
 	UnifiedReputationChange as Rep,
 };
-use vine_node_primitives::{AvailableData, ErasureChunk};
-use vine_node_subsystem::{jaeger, messages::AvailabilityStoreMessage, SubsystemSender};
-use vine_primitives::v2::{CandidateHash, ValidatorIndex};
+use polkadot_node_primitives::{AvailableData, ErasureChunk};
+use polkadot_node_subsystem::{jaeger, messages::AvailabilityStoreMessage, SubsystemSender};
+use polkadot_primitives::{CandidateHash, ValidatorIndex};
 
 use crate::{
 	error::{JfyiError, Result},
@@ -186,7 +186,10 @@ where
 {
 	let span = jaeger::Span::new(req.payload.candidate_hash, "answer-chunk-request");
 
-	let _child_span = span.child("answer-chunk-request").with_chunk_index(req.payload.index.0);
+	let _child_span = span
+		.child("answer-chunk-request")
+		.with_trace_id(req.payload.candidate_hash)
+		.with_chunk_index(req.payload.index.0);
 
 	let chunk = query_chunk(sender, req.payload.candidate_hash, req.payload.index).await?;
 
@@ -196,7 +199,7 @@ where
 		target: LOG_TARGET,
 		hash = ?req.payload.candidate_hash,
 		index = ?req.payload.index,
-		vine = ?req.vine,
+		peer = ?req.peer,
 		has_data = ?chunk.is_some(),
 		"Serving chunk",
 	);

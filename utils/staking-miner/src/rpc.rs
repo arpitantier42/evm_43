@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! JSON-RPC related types and helpers.
 
@@ -103,9 +103,11 @@ pub trait RpcApi {
 	fn subscribe_finalized_heads(&self);
 }
 
+type Uri = String;
+
 /// Wraps a shared web-socket JSON-RPC client that can be cloned.
 #[derive(Clone, Debug)]
-pub(crate) struct SharedRpcClient(Arc<WsClient>);
+pub(crate) struct SharedRpcClient(Arc<WsClient>, Uri);
 
 impl Deref for SharedRpcClient {
 	type Target = WsClient;
@@ -116,9 +118,9 @@ impl Deref for SharedRpcClient {
 }
 
 impl SharedRpcClient {
-	/// Consume and extract the inner client.
-	pub fn into_inner(self) -> Arc<WsClient> {
-		self.0
+	/// Get the URI of the client.
+	pub fn uri(&self) -> &str {
+		&self.1
 	}
 
 	/// Create a new shared JSON-RPC web-socket client.
@@ -131,9 +133,10 @@ impl SharedRpcClient {
 			.connection_timeout(connection_timeout)
 			.max_request_body_size(u32::MAX)
 			.request_timeout(request_timeout)
+			.max_concurrent_requests(u32::MAX as usize)
 			.build(uri)
 			.await?;
-		Ok(Self(Arc::new(client)))
+		Ok(Self(Arc::new(client), uri.to_owned()))
 	}
 
 	/// Get a storage item and decode it as `T`.

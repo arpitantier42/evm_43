@@ -1,43 +1,43 @@
-// Copyright 2020-2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 use assert_matches::assert_matches;
 use bitvec::bitvec;
 use futures::executor;
 use maplit::hashmap;
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	grid_topology::{SessionBoundGridTopologyStorage, SessionGridTopology, TopologyPeerInfo},
 	our_view,
 	peer_set::ValidationVersion,
 	view, ObservedRole,
 };
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	jaeger,
 	jaeger::{PerLeafSpan, Span},
 };
-use vine_node_subsystem_test_helpers::make_subsystem_context;
-use vine_node_subsystem_util::TimeoutExt;
-use vine_primitives::v2::{AvailabilityBitfield, Signed, ValidatorIndex};
+use polkadot_node_subsystem_test_helpers::make_subsystem_context;
+use polkadot_node_subsystem_util::TimeoutExt;
+use polkadot_primitives::{AvailabilityBitfield, Signed, ValidatorIndex};
 use rand_chacha::ChaCha12Rng;
-use sp_application_crypto::AppKey;
+use sp_application_crypto::AppCrypto;
 use sp_authority_discovery::AuthorityPair as AuthorityDiscoveryPair;
 use sp_core::Pair as PairT;
 use sp_keyring::Sr25519Keyring;
-use sp_keystore::{testing::KeyStore, SyncCryptoStore, SyncCryptoStorePtr};
+use sp_keystore::{testing::MemoryKeystore, Keystore, KeystorePtr};
 
 use std::{iter::FromIterator as _, sync::Arc, time::Duration};
 
@@ -83,7 +83,7 @@ fn prewarmed_state(
 					span: PerLeafSpan::new(Arc::new(jaeger::Span::Disabled), "test"),
 				},
 		},
-		peer_views: peers.iter().cloned().map(|vine| (vine, view!(relay_parent))).collect(),
+		peer_views: peers.iter().cloned().map(|peer| (peer, view!(relay_parent))).collect(),
 		topologies,
 		view: our_view!(relay_parent),
 	}
@@ -92,13 +92,13 @@ fn prewarmed_state(
 fn state_with_view(
 	view: OurView,
 	relay_parent: Hash,
-) -> (ProtocolState, SigningContext, SyncCryptoStorePtr, ValidatorId) {
+) -> (ProtocolState, SigningContext, KeystorePtr, ValidatorId) {
 	let mut state = ProtocolState::default();
 
 	let signing_context = SigningContext { session_index: 1, parent_hash: relay_parent.clone() };
 
-	let keystore: SyncCryptoStorePtr = Arc::new(KeyStore::new());
-	let validator = SyncCryptoStore::sr25519_generate_new(&*keystore, ValidatorId::ID, None)
+	let keystore: KeystorePtr = Arc::new(MemoryKeystore::new());
+	let validator = Keystore::sr25519_generate_new(&*keystore, ValidatorId::ID, None)
 		.expect("generating sr25519 key not to fail");
 
 	state.per_relay_parent = view
@@ -139,43 +139,43 @@ fn receive_invalid_signature() {
 	let signing_context = SigningContext { session_index: 1, parent_hash: hash_a.clone() };
 
 	// another validator not part of the validatorset
-	let keystore: SyncCryptoStorePtr = Arc::new(KeyStore::new());
-	let malicious = SyncCryptoStore::sr25519_generate_new(&*keystore, ValidatorId::ID, None)
+	let keystore: KeystorePtr = Arc::new(MemoryKeystore::new());
+	let malicious = Keystore::sr25519_generate_new(&*keystore, ValidatorId::ID, None)
 		.expect("Malicious key created");
-	let validator_0 = SyncCryptoStore::sr25519_generate_new(&*keystore, ValidatorId::ID, None)
-		.expect("key created");
-	let validator_1 = SyncCryptoStore::sr25519_generate_new(&*keystore, ValidatorId::ID, None)
-		.expect("key created");
+	let validator_0 =
+		Keystore::sr25519_generate_new(&*keystore, ValidatorId::ID, None).expect("key created");
+	let validator_1 =
+		Keystore::sr25519_generate_new(&*keystore, ValidatorId::ID, None).expect("key created");
 
 	let payload = AvailabilityBitfield(bitvec![u8, bitvec::order::Lsb0; 1u8; 32]);
-	let invalid_signed = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let invalid_signed = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload.clone(),
 		&signing_context,
 		ValidatorIndex(0),
 		&malicious.into(),
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
-	let invalid_signed_2 = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let invalid_signed_2 = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload.clone(),
 		&signing_context,
 		ValidatorIndex(1),
 		&malicious.into(),
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
 
-	let valid_signed = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let valid_signed = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload,
 		&signing_context,
 		ValidatorIndex(0),
 		&validator_0.into(),
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -233,9 +233,9 @@ fn receive_invalid_signature() {
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_SIGNATURE_INVALID)
 			}
 		);
@@ -263,13 +263,13 @@ fn receive_invalid_validator_index() {
 	state.peer_views.insert(peer_b.clone(), view![hash_a]);
 
 	let payload = AvailabilityBitfield(bitvec![u8, bitvec::order::Lsb0; 1u8; 32]);
-	let signed = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let signed = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload,
 		&signing_context,
 		ValidatorIndex(42),
 		&validator,
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -294,9 +294,9 @@ fn receive_invalid_validator_index() {
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_VALIDATOR_INDEX_INVALID)
 			}
 		);
@@ -323,13 +323,13 @@ fn receive_duplicate_messages() {
 
 	// create a signed message by validator 0
 	let payload = AvailabilityBitfield(bitvec![u8, bitvec::order::Lsb0; 1u8; 32]);
-	let signed_bitfield = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let signed_bitfield = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload,
 		&signing_context,
 		ValidatorIndex(0),
 		&validator,
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -370,14 +370,14 @@ fn receive_duplicate_messages() {
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, BENEFIT_VALID_MESSAGE_FIRST)
 			}
 		);
 
-		// let vine A send the same message again
+		// let peer A send the same message again
 		launch!(handle_network_msg(
 			&mut ctx,
 			&mut state,
@@ -389,14 +389,14 @@ fn receive_duplicate_messages() {
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_a);
+				assert_eq!(peer, peer_a);
 				assert_eq!(rep, BENEFIT_VALID_MESSAGE)
 			}
 		);
 
-		// let vine B send the initial message again
+		// let peer B send the initial message again
 		launch!(handle_network_msg(
 			&mut ctx,
 			&mut state,
@@ -408,9 +408,9 @@ fn receive_duplicate_messages() {
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_PEER_DUPLICATE_MESSAGE)
 			}
 		);
@@ -436,13 +436,13 @@ fn do_not_relay_message_twice() {
 
 	// create a signed message by validator 0
 	let payload = AvailabilityBitfield(bitvec![u8, bitvec::order::Lsb0; 1u8; 32]);
-	let signed_bitfield = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let signed_bitfield = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload,
 		&signing_context,
 		ValidatorIndex(0),
 		&validator,
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -547,13 +547,13 @@ fn changing_view() {
 
 	// create a signed message by validator 0
 	let payload = AvailabilityBitfield(bitvec![u8, bitvec::order::Lsb0; 1u8; 32]);
-	let signed_bitfield = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let signed_bitfield = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload,
 		&signing_context,
 		ValidatorIndex(0),
 		&validator,
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -581,7 +581,7 @@ fn changing_view() {
 			&mut rng,
 		));
 
-		// make vine b interested
+		// make peer b interested
 		launch!(handle_network_msg(
 			&mut ctx,
 			&mut state,
@@ -613,13 +613,13 @@ fn changing_view() {
 			}
 		);
 
-		// reputation change for vine B
+		// reputation change for peer B
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, BENEFIT_VALID_MESSAGE_FIRST)
 			}
 		);
@@ -633,7 +633,7 @@ fn changing_view() {
 		));
 
 		assert!(state.peer_views.contains_key(&peer_b));
-		assert_eq!(state.peer_views.get(&peer_b).expect("Must contain value for vine B"), &view![]);
+		assert_eq!(state.peer_views.get(&peer_b).expect("Must contain value for peer B"), &view![]);
 
 		// on rx of the same message, since we are not interested,
 		// should give penalty
@@ -645,13 +645,13 @@ fn changing_view() {
 			&mut rng,
 		));
 
-		// reputation change for vine B
+		// reputation change for peer B
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_PEER_DUPLICATE_MESSAGE)
 			}
 		);
@@ -677,13 +677,13 @@ fn changing_view() {
 			&mut rng,
 		));
 
-		// reputation change for vine B
+		// reputation change for peer B
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_a);
+				assert_eq!(peer, peer_a);
 				assert_eq!(rep, COST_NOT_IN_VIEW)
 			}
 		);
@@ -708,13 +708,13 @@ fn do_not_send_message_back_to_origin() {
 
 	// create a signed message by validator 0
 	let payload = AvailabilityBitfield(bitvec![u8, bitvec::order::Lsb0; 1u8; 32]);
-	let signed_bitfield = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let signed_bitfield = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload,
 		&signing_context,
 		ValidatorIndex(0),
 		&validator,
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -766,9 +766,9 @@ fn do_not_send_message_back_to_origin() {
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, BENEFIT_VALID_MESSAGE_FIRST)
 			}
 		);
@@ -823,19 +823,19 @@ fn topology_test() {
 
 	// create a signed message by validator 0
 	let payload = AvailabilityBitfield(bitvec![u8, bitvec::order::Lsb0; 1u8; 32]);
-	let signed_bitfield = executor::block_on(Signed::<AvailabilityBitfield>::sign(
+	let signed_bitfield = Signed::<AvailabilityBitfield>::sign(
 		&keystore,
 		payload,
 		&signing_context,
 		ValidatorIndex(0),
 		&validator,
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
 
-	peers_x.iter().chain(peers_y.iter()).for_each(|vine| {
-		state.peer_views.insert(vine.clone(), view![hash]);
+	peers_x.iter().chain(peers_y.iter()).for_each(|peer| {
+		state.peer_views.insert(peer.clone(), view![hash]);
 	});
 
 	let msg = BitfieldGossipMessage {
@@ -876,8 +876,8 @@ fn topology_test() {
 				let topology = state.topologies.get_current_topology().local_grid_neighbors();
 				// It should send message to all peers in y direction and to 4 random peers in x direction
 				assert_eq!(peers_y.len() + 4, peers.len());
-				assert!(topology.peers_y.iter().all(|vine| peers.contains(&vine)));
-				assert!(topology.peers_x.iter().filter(|vine| peers.contains(&vine)).count() == 4);
+				assert!(topology.peers_y.iter().all(|peer| peers.contains(&peer)));
+				assert!(topology.peers_x.iter().filter(|peer| peers.contains(&peer)).count() == 4);
 				// Must never include originator
 				assert!(!peers.contains(&peers_x[0]));
 				assert_eq!(send_msg, msg.clone().into_validation_protocol());
@@ -887,9 +887,9 @@ fn topology_test() {
 		assert_matches!(
 			handle.recv().await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep)
+				NetworkBridgeTxMessage::ReportPeer(peer, rep)
 			) => {
-				assert_eq!(vine, peers_x[0]);
+				assert_eq!(peer, peers_x[0]);
 				assert_eq!(rep, BENEFIT_VALID_MESSAGE_FIRST)
 			}
 		);

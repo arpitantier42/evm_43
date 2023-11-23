@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Network protocol types for parachains.
 
@@ -20,11 +20,11 @@
 #![warn(missing_docs)]
 
 use parity_scale_codec::{Decode, Encode};
-use vine_primitives::v2::{BlockNumber, Hash};
+use polkadot_primitives::{BlockNumber, Hash};
 use std::{collections::HashMap, fmt};
 
 #[doc(hidden)]
-pub use vine_node_jaeger as jaeger;
+pub use polkadot_node_jaeger as jaeger;
 pub use sc_network::{IfDisconnected, PeerId};
 #[doc(hidden)]
 pub use std::sync::Arc;
@@ -35,7 +35,7 @@ pub use self::reputation::{ReputationChange, UnifiedReputationChange};
 /// Peer-sets and protocols used for parachains.
 pub mod peer_set;
 
-/// Request/response protocols used in vine.
+/// Request/response protocols used in Polkadot.
 pub mod request_response;
 
 /// Accessing authority discovery service
@@ -138,8 +138,8 @@ impl std::ops::Deref for OurView {
 /// # Example
 ///
 /// ```
-/// # use vine_node_network_protocol::our_view;
-/// # use vine_primitives::v2::Hash;
+/// # use polkadot_node_network_protocol::our_view;
+/// # use polkadot_primitives::Hash;
 /// let our_view = our_view![Hash::repeat_byte(1), Hash::repeat_byte(2)];
 /// ```
 #[macro_export]
@@ -152,7 +152,7 @@ macro_rules! our_view {
 	};
 }
 
-/// A succinct representation of a vine's view. This consists of a bounded amount of chain heads
+/// A succinct representation of a peer's view. This consists of a bounded amount of chain heads
 /// and the highest known finalized block number.
 ///
 /// Up to `N` (5?) chain heads.
@@ -172,8 +172,8 @@ pub struct View {
 /// # Example
 ///
 /// ```
-/// # use vine_node_network_protocol::view;
-/// # use vine_primitives::v2::Hash;
+/// # use polkadot_node_network_protocol::view;
+/// # use polkadot_primitives::Hash;
 /// let view = view![Hash::repeat_byte(1), Hash::repeat_byte(2)];
 /// ```
 #[macro_export]
@@ -398,12 +398,12 @@ impl_versioned_try_from!(
 pub mod v1 {
 	use parity_scale_codec::{Decode, Encode};
 
-	use vine_primitives::v2::{
+	use polkadot_primitives::{
 		CandidateHash, CandidateIndex, CollatorId, CollatorSignature, CompactStatement, Hash,
 		Id as ParaId, UncheckedSignedAvailabilityBitfield, ValidatorIndex, ValidatorSignature,
 	};
 
-	use vine_node_primitives::{
+	use polkadot_node_primitives::{
 		approval::{IndirectAssignmentCert, IndirectSignedApprovalVote},
 		UncheckedSignedFullStatement,
 	};
@@ -506,7 +506,7 @@ pub mod v1 {
 		/// signature of the `PeerId` of the node using the given collator ID key.
 		#[codec(index = 0)]
 		Declare(CollatorId, ParaId, CollatorSignature),
-		/// Advertise a collation to a validator. Can only be sent once the vine has
+		/// Advertise a collation to a validator. Can only be sent once the peer has
 		/// declared that they are a collator with given ID.
 		#[codec(index = 1)]
 		AdvertiseCollation(Hash),
@@ -515,7 +515,7 @@ pub mod v1 {
 		CollationSeconded(Hash, UncheckedSignedFullStatement),
 	}
 
-	/// All network messages on the validation vine-set.
+	/// All network messages on the validation peer-set.
 	#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, derive_more::From)]
 	pub enum ValidationProtocol {
 		/// Bitfield distribution messages
@@ -532,7 +532,7 @@ pub mod v1 {
 		ApprovalDistribution(ApprovalDistributionMessage),
 	}
 
-	/// All network messages on the collation vine-set.
+	/// All network messages on the collation peer-set.
 	#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, derive_more::From)]
 	pub enum CollationProtocol {
 		/// Collator protocol messages
@@ -543,7 +543,7 @@ pub mod v1 {
 
 	/// Get the payload that should be signed and included in a `Declare` message.
 	///
-	/// The payload is the local vine id of the node, which serves to prove that it
+	/// The payload is the local peer id of the node, which serves to prove that it
 	/// controls the collator key it is declaring an intention to collate under.
 	pub fn declare_signature_payload(peer_id: &sc_network::PeerId) -> Vec<u8> {
 		let mut payload = peer_id.to_bytes();

@@ -1,22 +1,21 @@
-// Copyright 2017-2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use log::info;
-use vine_node_core_pvf::sp_maybe_compressed_blob;
-use vine_performance_test::{
+use polkadot_performance_test::{
 	measure_erasure_coding, measure_pvf_prepare, PerfCheckError, ERASURE_CODING_N_VALIDATORS,
 	ERASURE_CODING_TIME_LIMIT, PVF_PREPARE_TIME_LIMIT, VALIDATION_CODE_BOMB_LIMIT,
 };
@@ -26,7 +25,7 @@ pub fn host_perf_check() -> Result<(), PerfCheckError> {
 	let pvf_prepare_time_limit = time_limit_from_baseline(PVF_PREPARE_TIME_LIMIT);
 	let erasure_coding_time_limit = time_limit_from_baseline(ERASURE_CODING_TIME_LIMIT);
 	let wasm_code =
-		vine_performance_test::WASM_BINARY.ok_or(PerfCheckError::WasmBinaryMissing)?;
+		polkadot_performance_test::WASM_BINARY.ok_or(PerfCheckError::WasmBinaryMissing)?;
 
 	// Decompress the code before running checks.
 	let code = sp_maybe_compressed_blob::decompress(wasm_code, VALIDATION_CODE_BOMB_LIMIT)

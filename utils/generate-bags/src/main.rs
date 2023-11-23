@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Make the set of voting bag thresholds to be used in `voter_bags.rs`.
 //!
@@ -22,15 +22,17 @@
 
 use clap::{Parser, ValueEnum};
 use generate_bags::generate_thresholds;
-
-use vine_runtime::Runtime as peerRuntime;
+use kusama_runtime::Runtime as KusamaRuntime;
+use polkadot_runtime::Runtime as PolkadotRuntime;
 use std::path::{Path, PathBuf};
-
+use westend_runtime::Runtime as WestendRuntime;
 
 #[derive(Clone, Debug, ValueEnum)]
 #[value(rename_all = "PascalCase")]
 enum Runtime {
-	vine,
+	Westend,
+	Kusama,
+	Polkadot,
 }
 
 impl Runtime {
@@ -38,8 +40,9 @@ impl Runtime {
 		&self,
 	) -> Box<dyn FnOnce(usize, &Path, u128, u128) -> Result<(), std::io::Error>> {
 		match self {
-
-			Runtime::vine => Box::new(generate_thresholds::<peerRuntime>),
+			Runtime::Westend => Box::new(generate_thresholds::<WestendRuntime>),
+			Runtime::Kusama => Box::new(generate_thresholds::<KusamaRuntime>),
+			Runtime::Polkadot => Box::new(generate_thresholds::<PolkadotRuntime>),
 		}
 	}
 }
@@ -51,7 +54,7 @@ struct Opt {
 	n_bags: usize,
 
 	/// Which runtime to generate.
-	#[arg(long, ignore_case = true, value_enum, default_value_t = Runtime::vine)]
+	#[arg(long, ignore_case = true, value_enum, default_value_t = Runtime::Polkadot)]
 	runtime: Runtime,
 
 	/// Where to write the output.

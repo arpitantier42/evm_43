@@ -1,10 +1,10 @@
 [[bin]]
-name = "vine"
+name = "polkadot"
 path = "src/main.rs"
 
 [package]
-name = "vine"
-description = "Implementation of a `https://vine.network` node in Rust based on the Substrate framework."
+name = "polkadot"
+description = "Implementation of a `https://polkadot.network` node in Rust based on the Substrate framework."
 license = "GPL-3.0-only"
 rust-version = "1.64.0" # workspace properties
 readme = "README.md"
@@ -13,37 +13,48 @@ edition.workspace = true
 version.workspace = true
 
 [workspace.package]
-authors = ["Vine Inc <admin@vine.io>"]
+authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
-repository = "https://github.com/paritytech/vine.git"
-version = "0.9.36"
+repository = "https://github.com/paritytech/polkadot.git"
+version = "0.9.43"
 
 [dependencies]
-vine-cli = { path = "cli", features = [  ]  }
 color-eyre = { version = "0.6.1", default-features = false }
 tikv-jemallocator = "0.5.0"
 
+# Crates in our workspace, defined as dependencies so we can pass them feature flags.
+polkadot-cli = { path = "cli", features = [ "kusama-native", "westend-native", "rococo-native" ]  }
+polkadot-node-core-pvf-worker = { path = "node/core/pvf/worker" }
+polkadot-overseer = { path = "node/overseer" }
+
 [dev-dependencies]
 assert_cmd = "2.0.4"
-nix = "0.24.1"
+nix = { version = "0.26.1", features = ["signal"] }
 tempfile = "3.2.0"
-tokio = "1.22.0"
-substrate-rpc-client = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-vine-core-primitives = { path = "core-primitives" }
- 
+tokio = "1.24.2"
+substrate-rpc-client = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+polkadot-core-primitives = { path = "core-primitives" }
+
 [workspace]
 members = [
 	"cli",
 	"core-primitives",
 	"erasure-coding",
+	"erasure-coding/fuzzer",
 	"primitives",
 	"primitives/test-helpers",
 	"runtime/common",
 	"runtime/common/slot_range_helper",
 	"runtime/metrics",
 	"runtime/parachains",
-	"runtime/vine",
-	"runtime/vine/constants",
+	"runtime/polkadot",
+	"runtime/polkadot/constants",
+	"runtime/kusama",
+	"runtime/kusama/constants",
+	"runtime/rococo",
+	"runtime/rococo/constants",
+	"runtime/westend",
+	"runtime/westend/constants",
 	"runtime/test-runtime",
 	"runtime/test-runtime/constants",
 	"statement-table",
@@ -70,6 +81,7 @@ members = [
 	"node/core/parachains-inherent",
 	"node/core/provisioner",
 	"node/core/pvf",
+	"node/core/pvf/worker",
 	"node/core/pvf-checker",
 	"node/core/runtime-api",
 	"node/network/approval-distribution",
@@ -109,7 +121,42 @@ members = [
 	"utils/staking-miner",
 	"utils/remote-ext-tests/bags-list",
 	"utils/generate-bags",
-	"sub-tokens",
+
+	#evm-frame
+	"evm_frame/evm",
+	"evm_frame/dynamic-fee",
+	"evm_frame/ethereum",
+	"evm_frame/base-fee",
+	"evm_frame/evm-chain-id",
+	"evm_frame/hotfix-sufficients",
+	"evm_frame/evm/test-vector-support",
+	"evm_frame/evm/precompile/simple",
+	"evm_frame/evm/precompile/blake2",
+	"evm_frame/evm/precompile/bn128",
+	"evm_frame/evm/precompile/curve25519",
+	"evm_frame/evm/precompile/dispatch",
+	"evm_frame/evm/precompile/ed25519",
+	"evm_frame/evm/precompile/modexp",
+	"evm_frame/evm/precompile/sha3fips",
+
+	#evm-primitives
+	"evm-primitives/account",
+	"evm-primitives/evm",
+	"evm-primitives/storage",
+	"evm-primitives/rpc",
+	"evm-primitives/self-contained",
+	"evm-primitives/ethereum",
+	"evm-primitives/dynamic-fee",
+	"evm-primitives/consensus",
+
+	#evm -client
+    "evm-client/cli",
+	"evm-client/consensus",
+	"evm-client/db",
+	"evm-client/mapping-sync",
+	"evm-client/rpc",
+	"evm-client/rpc-core",
+	"evm-client/storage",
 ]
 
 [badges]
@@ -171,7 +218,7 @@ yamux = { opt-level = 3 }
 zeroize = { opt-level = 3 }
 
 [profile.release]
-# vine runtime requires unwinding.
+# Polkadot runtime requires unwinding.
 panic = "unwind"
 opt-level = 3
 
@@ -192,41 +239,29 @@ debug-assertions = true
 overflow-checks = true
 
 [features]
-runtime-benchmarks= [ "vine-cli/runtime-benchmarks" ]
-try-runtime = [ "vine-cli/try-runtime" ]
-fast-runtime = [ "vine-cli/fast-runtime" ]
-runtime-metrics = [ "vine-cli/runtime-metrics" ]
-pyroscope = ["vine-cli/pyroscope"]
+runtime-benchmarks= [ "polkadot-cli/runtime-benchmarks" ]
+try-runtime = [ "polkadot-cli/try-runtime" ]
+fast-runtime = [ "polkadot-cli/fast-runtime" ]
+runtime-metrics = [ "polkadot-cli/runtime-metrics" ]
+pyroscope = ["polkadot-cli/pyroscope"]
+jemalloc-allocator = ["polkadot-node-core-pvf-worker/jemalloc-allocator", "polkadot-overseer/jemalloc-allocator"]
 
 # Configuration for building a .deb package - for use with `cargo-deb`
 [package.metadata.deb]
-name = "vine"
-extended-description = "Implementation of a https://vine.network node in Rust based on the Substrate framework."
+name = "polkadot"
+extended-description = "Implementation of a https://polkadot.network node in Rust based on the Substrate framework."
 section = "misc"
-maintainer = "martin@parity.io"
+maintainer = "security@parity.io"
 license-file = ["LICENSE", "0"]
 # https://www.debian.org/doc/debian-policy/ch-maintainerscripts.html
 maintainer-scripts = "scripts/packaging/deb-maintainer-scripts"
 assets = [
-	["target/release/vine", "/usr/bin/", "755"],
-	["scripts/packaging/vine.service", "/lib/systemd/system/", "644"]
+	["target/release/polkadot", "/usr/bin/", "755"],
+	["scripts/packaging/polkadot.service", "/lib/systemd/system/", "644"]
 ]
 conf-files = [
-	"/etc/default/vine"
+	"/etc/default/polkadot"
 ]
-
-# Configuration for building an .rpm package - for use with `cargo-rpm`
-[package.metadata.rpm]
-package = "vine"
-
-[package.metadata.rpm.cargo]
-buildflags = ["--release"]
-
-[package.metadata.rpm.targets]
-vine = { path = "/usr/bin/vine" }
-
-[package.metadata.rpm.files]
-"../scripts/packaging/vine.service" = { path = "/usr/lib/systemd/system/vine.service", mode = "644" }
 
 [package.metadata.spellcheck]
 config = "./scripts/ci/gitlab/spellcheck.toml"

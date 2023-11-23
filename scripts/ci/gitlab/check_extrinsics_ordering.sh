@@ -5,20 +5,21 @@ set -e
 #shellcheck source=../common/lib.sh
 . "$(dirname "${0}")/../common/lib.sh"
 
-HEAD_BIN=./artifacts/vine
+HEAD_BIN=./artifacts/polkadot
 HEAD_WS=ws://localhost:9944
 RELEASE_WS=ws://localhost:9945
 
 runtimes=(
-
-  "vine"
+  "westend"
+  "kusama"
+  "polkadot"
 )
 
 # First we fetch the latest released binary
-latest_release=$(latest_release 'paritytech/vine')
-RELEASE_BIN="./vine-$latest_release"
-echo "[+] Fetching binary for vine version $latest_release"
-curl -L "https://github.com/paritytech/vine/releases/download/$latest_release/vine" > "$RELEASE_BIN" || exit 1
+latest_release=$(latest_release 'paritytech/polkadot')
+RELEASE_BIN="./polkadot-$latest_release"
+echo "[+] Fetching binary for Polkadot version $latest_release"
+curl -L "https://github.com/paritytech/polkadot/releases/download/$latest_release/polkadot" > "$RELEASE_BIN" || exit 1
 chmod +x "$RELEASE_BIN"
 
 
@@ -63,7 +64,7 @@ for RUNTIME in "${runtimes[@]}"; do
   sleep 5
 
   changed_extrinsics=$(
-    vine-js-metadata-cmp "$RELEASE_WS" "$HEAD_WS" \
+    polkadot-js-metadata-cmp "$RELEASE_WS" "$HEAD_WS" \
       | sed 's/^ \+//g' | grep -e 'idx: [0-9]\+ -> [0-9]\+' || true
   )
 

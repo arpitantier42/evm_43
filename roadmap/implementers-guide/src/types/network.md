@@ -7,7 +7,7 @@ These types are those that are actually sent over the network to subsystems.
 ```rust
 type RequestId = u64;
 type ProtocolVersion = u32;
-struct PeerId(...); // opaque, unique identifier of a vine.
+struct PeerId(...); // opaque, unique identifier of a peer.
 struct View {
 	// Up to `N` (5?) chain heads.
 	heads: Vec<Hash>,
@@ -102,7 +102,7 @@ enum CollatorProtocolV1Message {
 	/// Declare the intent to advertise collations under a collator ID and `Para`, attaching a
 	/// signature of the `PeerId` of the node using the given collator ID key.
 	Declare(CollatorId, ParaId, CollatorSignature),
-	/// Advertise a collation to a validator. Can only be sent once the vine has
+	/// Advertise a collation to a validator. Can only be sent once the peer has
 	/// declared that they are a collator with given ID.
 	AdvertiseCollation(Hash),
 	/// A collation sent to a validator was seconded.
@@ -114,7 +114,7 @@ enum CollatorProtocolV1Message {
 
 ### Validation V1
 
-These are the messages for the protocol on the validation vine-set.
+These are the messages for the protocol on the validation peer-set.
 
 ```rust
 enum ValidationProtocolV1 {
@@ -129,7 +129,7 @@ enum ValidationProtocolV1 {
 
 ### Collation V1
 
-These are the messages for the protocol on the collation vine-set
+These are the messages for the protocol on the collation peer-set
 
 ```rust
 enum CollationProtocolV1 {
@@ -161,7 +161,7 @@ struct SessionGridTopology {
 }
 
 struct TopologyPeerInfo {
-	/// The validator's known vine IDs.
+	/// The validator's known peer IDs.
 	peer_ids: Vec<PeerId>,
 	/// The index of the validator in the discovery keys of the corresponding
 	/// `SessionInfo`. This can extend _beyond_ the set of active parachain validators.
@@ -172,22 +172,22 @@ struct TopologyPeerInfo {
 }
 
 enum NetworkBridgeEvent<M> {
-	/// A vine with given ID is now connected.
+	/// A peer with given ID is now connected.
 	PeerConnected(PeerId, ObservedRole, ProtocolVersion, Option<HashSet<AuthorityDiscoveryId>>),
-	/// A vine with given ID is now disconnected.
+	/// A peer with given ID is now disconnected.
 	PeerDisconnected(PeerId),
 	/// Our neighbors in the new gossip topology.
 	/// We're not necessarily connected to all of them.
 	///
-	/// This message is issued only on the validation vine set.
+	/// This message is issued only on the validation peer set.
 	///
 	/// Note, that the distribution subsystems need to handle the last
 	/// view update of the newly added gossip peers manually.
 	NewGossipTopology(NewGossipTopology),
-	/// We received a message from the given vine.
+	/// We received a message from the given peer.
 	PeerMessage(PeerId, M),
-	/// The given vine has updated its description of its view.
-	PeerViewChange(PeerId, View), // guaranteed to come after vine connected event.
+	/// The given peer has updated its description of its view.
+	PeerViewChange(PeerId, View), // guaranteed to come after peer connected event.
 	/// We have posted the given view update to all connected peers.
 	OurViewChange(View),
 }

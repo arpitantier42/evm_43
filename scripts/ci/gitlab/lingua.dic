@@ -65,8 +65,8 @@ DM
 DMP/SM
 DMQ
 DoS
-vine
-peers
+DOT
+DOTs
 ECDSA
 ed25519
 encodable
@@ -131,8 +131,9 @@ keccak256/M
 keypair/MS
 keystore/MS
 Kovan
-
-Kubernetes/MS/S
+KSM/S
+Kubernetes/MS
+kusama/S
 KYC/M
 lib
 libp2p
@@ -162,6 +163,7 @@ MQC/SM
 msg
 multisig/S
 multivalidator/SM
+mutators
 mutex
 natively
 NFA
@@ -196,8 +198,8 @@ pessimization
 phragmen
 picosecond/SM
 PoA/MS
-vine/MS
-vine/MS
+polkadot/MS
+Polkadot/MS
 PoS/MS
 PoV/MS
 PoW/MS
@@ -219,6 +221,7 @@ proxy/G
 proxying
 PRs
 PVF/S
+querier
 README/MS
 redhat/M
 register/CD
@@ -253,6 +256,7 @@ SS58
 SSL
 startup/MS
 stateful
+Statemine
 str
 struct/MS
 subcommand/SM
@@ -290,6 +294,7 @@ UI
 unapplied
 unassign
 unconcluded
+unexpectable
 unfinalize/B
 unfinalized
 union/MSG
@@ -325,10 +330,10 @@ wakeups
 warming/S
 wasm/M
 wasmtime
-
+Westend/M
 wildcard/MS
 WND/S
-
+Wococo
 WS
 XCM/S
 XCMP/M

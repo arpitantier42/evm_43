@@ -1,58 +1,60 @@
 [package]
-name = "vine-rpc"
+name = "polkadot-rpc"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
 jsonrpsee = { version = "0.16.2", features = ["server"] }
-futures = { version = "0.3.21", features = [ "compat" ] }
-vine-primitives = { path = "../primitives" }
-sc-client-api = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-blockchain = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-keystore = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-runtime = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-api = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-consensus = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-consensus-babe = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-chain-spec = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-consensus-babe = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-consensus-babe-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-consensus-epochs = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-finality-grandpa = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-finality-grandpa-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-sync-state-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-transaction-pool = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-network = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sc-service= { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+clap = { version = "4.0.9", features = ["derive"] }
 
-txpool-api = { package = "sc-transaction-pool-api", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-frame-rpc-system = { package = "substrate-frame-rpc-system", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-mmr-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-pallet-transaction-payment-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-sp-block-builder = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-beefy-gadget = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-beefy-gadget-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
-substrate-state-trie-migration-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+polkadot-primitives = { path = "../primitives" }
+sc-client-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-blockchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-consensus = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-consensus-babe = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-chain-spec = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-statement-store = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+
+sc-consensus-babe = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-consensus-babe-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-consensus-beefy = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-consensus-beefy-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-consensus-epochs = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-consensus-grandpa = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-consensus-grandpa-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+
+sc-network = {git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43"}
+sc-network-sync = {git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43"}
+
+sc-transaction-pool = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sc-sync-state-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+txpool-api = { package = "sc-transaction-pool-api", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+frame-rpc-system = { package = "substrate-frame-rpc-system", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+mmr-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+pallet-transaction-payment-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-block-builder = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+substrate-state-trie-migration-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 
 
-vine-runtime = { version = "3.0.0-dev", path = "../runtime/vine" }
+polkadot-runtime = { path = "../runtime/polkadot"}
 
 
-
-
-
-# Frontier
-fc-cli = { path = "../evm-client/cli" }
-fc-consensus = { path = "../evm-client/consensus" }
-fc-db = { path = "../evm-client/db" }
-fc-mapping-sync = { path = "../evm-client/mapping-sync" }
-fc-rpc = { path = "../evm-client/rpc" }
-fc-rpc-core = { path = "../evm-client/rpc-core" }
-fp-consensus = { path = "../evm-primitives/consensus" }
-fp-dynamic-fee = { path = "../evm-primitives/dynamic-fee" }
-fp-evm = { path = "../evm-primitives/evm" }
-fp-rpc = { path = "../evm-primitives/rpc" }
-fp-storage = { path = "../evm-primitives/storage" }
+# Frontier	
+fc-cli = { path = "../evm-client/cli" }	
+fc-consensus = { path = "../evm-client/consensus" }	
+fc-db = { path = "../evm-client/db" }	
+fc-mapping-sync = { path = "../evm-client/mapping-sync" ,features = ["sql"]}	
+fc-rpc = { path = "../evm-client/rpc" }	
+fc-rpc-core = { path = "../evm-client/rpc-core" }	
+fp-consensus = { path = "../evm-primitives/consensus" }	
+fp-dynamic-fee = { path = "../evm-primitives/dynamic-fee" }	
+fp-evm = { path = "../evm-primitives/evm" }	
+fp-rpc = { path = "../evm-primitives/rpc" }	
+fp-storage = { path = "../evm-primitives/storage" }	
 

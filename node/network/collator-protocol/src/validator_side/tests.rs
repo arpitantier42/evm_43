@@ -1,42 +1,42 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 use assert_matches::assert_matches;
 use futures::{executor, future, Future};
 use sp_core::{crypto::Pair, Encode};
 use sp_keyring::Sr25519Keyring;
-use sp_keystore::{testing::KeyStore as TestKeyStore, SyncCryptoStore};
+use sp_keystore::{testing::MemoryKeystore, Keystore};
 use std::{iter, sync::Arc, task::Poll, time::Duration};
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	our_view,
 	peer_set::CollationVersion,
 	request_response::{Requests, ResponseSender},
 	ObservedRole,
 };
-use vine_node_primitives::BlockData;
-use vine_node_subsystem::messages::{AllMessages, RuntimeApiMessage, RuntimeApiRequest};
-use vine_node_subsystem_test_helpers as test_helpers;
-use vine_node_subsystem_util::TimeoutExt;
-use vine_primitives::v2::{
+use polkadot_node_primitives::BlockData;
+use polkadot_node_subsystem::messages::{AllMessages, RuntimeApiMessage, RuntimeApiRequest};
+use polkadot_node_subsystem_test_helpers as test_helpers;
+use polkadot_node_subsystem_util::TimeoutExt;
+use polkadot_primitives::{
 	CollatorPair, CoreState, GroupIndex, GroupRotationInfo, OccupiedCore, ScheduledCore,
 	ValidatorId, ValidatorIndex,
 };
-use vine_primitives_test_helpers::{
+use polkadot_primitives_test_helpers::{
 	dummy_candidate_descriptor, dummy_candidate_receipt_bad_sig, dummy_hash,
 };
 
@@ -122,7 +122,7 @@ struct TestHarness {
 fn test_harness<T: Future<Output = VirtualOverseer>>(test: impl FnOnce(TestHarness) -> T) {
 	let _ = env_logger::builder()
 		.is_test(true)
-		.filter(Some("vine_collator_protocol"), log::LevelFilter::Trace)
+		.filter(Some("polkadot_collator_protocol"), log::LevelFilter::Trace)
 		.filter(Some(LOG_TARGET), log::LevelFilter::Trace)
 		.try_init();
 
@@ -130,10 +130,10 @@ fn test_harness<T: Future<Output = VirtualOverseer>>(test: impl FnOnce(TestHarne
 
 	let (context, virtual_overseer) = test_helpers::make_subsystem_context(pool.clone());
 
-	let keystore = TestKeyStore::new();
+	let keystore = MemoryKeystore::new();
 	keystore
 		.sr25519_generate_new(
-			vine_primitives::v2::PARACHAIN_KEY_TYPE_ID,
+			polkadot_primitives::PARACHAIN_KEY_TYPE_ID,
 			Some(&Sr25519Keyring::Alice.to_seed()),
 		)
 		.unwrap();
@@ -262,10 +262,10 @@ async fn assert_collator_disconnect(virtual_overseer: &mut VirtualOverseer, expe
 	assert_matches!(
 		overseer_recv(virtual_overseer).await,
 		AllMessages::NetworkBridgeTx(NetworkBridgeTxMessage::DisconnectPeer(
-			vine,
+			peer,
 			peer_set,
 		)) => {
-			assert_eq!(expected_peer, vine);
+			assert_eq!(expected_peer, peer);
 			assert_eq!(PeerSet::Collation, peer_set);
 		}
 	);
@@ -298,14 +298,14 @@ async fn assert_fetch_collation_request(
 /// Connect and declare a collator
 async fn connect_and_declare_collator(
 	virtual_overseer: &mut VirtualOverseer,
-	vine: PeerId,
+	peer: PeerId,
 	collator: CollatorPair,
 	para_id: ParaId,
 ) {
 	overseer_send(
 		virtual_overseer,
 		CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerConnected(
-			vine.clone(),
+			peer.clone(),
 			ObservedRole::Full,
 			CollationVersion::V1.into(),
 			None,
@@ -316,11 +316,11 @@ async fn connect_and_declare_collator(
 	overseer_send(
 		virtual_overseer,
 		CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerMessage(
-			vine.clone(),
+			peer.clone(),
 			Versioned::V1(protocol_v1::CollatorProtocolMessage::Declare(
 				collator.public(),
 				para_id,
-				collator.sign(&protocol_v1::declare_signature_payload(&vine)),
+				collator.sign(&protocol_v1::declare_signature_payload(&peer)),
 			)),
 		)),
 	)
@@ -330,13 +330,13 @@ async fn connect_and_declare_collator(
 /// Advertise a collation.
 async fn advertise_collation(
 	virtual_overseer: &mut VirtualOverseer,
-	vine: PeerId,
+	peer: PeerId,
 	relay_parent: Hash,
 ) {
 	overseer_send(
 		virtual_overseer,
 		CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerMessage(
-			vine,
+			peer,
 			Versioned::V1(protocol_v1::CollatorProtocolMessage::AdvertiseCollation(relay_parent)),
 		)),
 	)
@@ -433,9 +433,9 @@ fn collator_reporting_works() {
 		assert_matches!(
 			overseer_recv(&mut virtual_overseer).await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep),
+				NetworkBridgeTxMessage::ReportPeer(peer, rep),
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_REPORT_BAD);
 			}
 		);
@@ -465,7 +465,7 @@ fn collator_authentication_verification_works() {
 		)
 		.await;
 
-		// the vine sends a declare message but sign the wrong payload
+		// the peer sends a declare message but sign the wrong payload
 		overseer_send(
 			&mut virtual_overseer,
 			CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerMessage(
@@ -483,9 +483,9 @@ fn collator_authentication_verification_works() {
 		assert_matches!(
 			overseer_recv(&mut virtual_overseer).await,
 			AllMessages::NetworkBridgeTx(
-				NetworkBridgeTxMessage::ReportPeer(vine, rep),
+				NetworkBridgeTxMessage::ReportPeer(peer, rep),
 			) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_INVALID_SIGNATURE);
 			}
 		);
@@ -709,10 +709,10 @@ fn reject_connection_to_next_group() {
 		assert_matches!(
 			overseer_recv(&mut virtual_overseer).await,
 			AllMessages::NetworkBridgeTx(NetworkBridgeTxMessage::ReportPeer(
-				vine,
+				peer,
 				rep,
 			)) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_UNNEEDED_COLLATOR);
 			}
 		);
@@ -802,10 +802,10 @@ fn fetch_next_collation_on_invalid_collation() {
 		assert_matches!(
 			overseer_recv(&mut virtual_overseer).await,
 			AllMessages::NetworkBridgeTx(NetworkBridgeTxMessage::ReportPeer(
-				vine,
+				peer,
 				rep,
 			)) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_REPORT_BAD);
 			}
 		);
@@ -1017,10 +1017,10 @@ fn disconnect_if_wrong_declare() {
 		assert_matches!(
 			overseer_recv(&mut virtual_overseer).await,
 			AllMessages::NetworkBridgeTx(NetworkBridgeTxMessage::ReportPeer(
-				vine,
+				peer,
 				rep,
 			)) => {
-				assert_eq!(vine, peer_b);
+				assert_eq!(peer, peer_b);
 				assert_eq!(rep, COST_UNNEEDED_COLLATOR);
 			}
 		);

@@ -1,24 +1,24 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! A utility for fetching all unknown blocks based on a new chain-head hash.
 
 use futures::{channel::oneshot, prelude::*};
-use vine_node_subsystem::{messages::ChainApiMessage, SubsystemSender};
-use vine_primitives::v2::{BlockNumber, Hash, Header};
+use polkadot_node_subsystem::{messages::ChainApiMessage, SubsystemSender};
+use polkadot_primitives::{BlockNumber, Hash, Header};
 
 /// Given a new chain-head hash, this determines the hashes of all new blocks we should track
 /// metadata for, given this head.
@@ -65,7 +65,7 @@ where
 	}
 
 	'outer: loop {
-		let &(ref last_hash, ref last_header) = ancestry
+		let (last_hash, last_header) = ancestry
 			.last()
 			.expect("ancestry has length 1 at initialization and is only added to; qed");
 
@@ -163,8 +163,8 @@ where
 mod tests {
 	use super::*;
 	use assert_matches::assert_matches;
-	use vine_node_subsystem_test_helpers::make_subsystem_context;
-	use vine_overseer::{AllMessages, SubsystemContext};
+	use polkadot_node_subsystem_test_helpers::make_subsystem_context;
+	use polkadot_overseer::{AllMessages, SubsystemContext};
 	use sp_core::testing::TaskExecutor;
 	use std::collections::{HashMap, HashSet};
 

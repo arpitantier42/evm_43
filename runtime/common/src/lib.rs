@@ -1,20 +1,20 @@
-// Copyright 2019-2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-//! Common runtime code for vine.
+//! Common runtime code for Polkadot and Kusama.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -27,9 +27,13 @@ pub mod impls;
 pub mod paras_registrar;
 pub mod paras_sudo_wrapper;
 pub mod purchase;
+pub mod session;
 pub mod slot_range;
 pub mod slots;
 pub mod traits;
+
+#[cfg(feature = "try-runtime")]
+pub mod try_runtime;
 pub mod xcm_sender;
 
 #[cfg(test)]
@@ -42,8 +46,8 @@ use frame_support::{
 	traits::{ConstU32, Currency, OneSessionHandler},
 	weights::{constants::WEIGHT_REF_TIME_PER_SECOND, Weight},
 };
-
-use primitives::v2::{AssignmentId, Balance, BlockNumber, ValidatorId, MAX_POV_SIZE};
+use frame_system::limits;
+use primitives::{AssignmentId, Balance, BlockNumber, ValidatorId};
 use sp_runtime::{FixedPointNumber, Perbill, Perquintill};
 use static_assertions::const_assert;
 
@@ -69,9 +73,10 @@ pub const AVERAGE_ON_INITIALIZE_RATIO: Perbill = Perbill::from_percent(1);
 /// We allow `Normal` extrinsics to fill up the block up to 75%, the rest can be used
 /// by  Operational  extrinsics.
 pub const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
+/// We allow for 2 seconds of compute with a 6 second average block time.
 /// The storage proof size is not limited so far.
 pub const MAXIMUM_BLOCK_WEIGHT: Weight =
-	Weight::from_parts(WEIGHT_REF_TIME_PER_SECOND.saturating_mul(2), MAX_POV_SIZE as u64);
+	Weight::from_parts(WEIGHT_REF_TIME_PER_SECOND.saturating_mul(2), u64::MAX);
 
 const_assert!(NORMAL_DISPATCH_RATIO.deconstruct() >= AVERAGE_ON_INITIALIZE_RATIO.deconstruct());
 
@@ -91,12 +96,12 @@ parameter_types! {
 	/// The maximum amount of the multiplier.
 	pub MaximumMultiplier: Multiplier = Bounded::max_value();
 	/// Maximum length of block. Up to 5MB.
-	pub BlockLength: frame_system::limits::BlockLength =
-	frame_system::limits::BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
+	pub BlockLength: limits::BlockLength =
+	limits::BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
 }
 
 /// Parameterized slow adjusting fee updated based on
-/// https://research.web3.foundation/en/latest/vine/overview/2-token-economics.html#-2.-slow-adjusting-mechanism
+/// https://research.web3.foundation/en/latest/polkadot/overview/2-token-economics.html#-2.-slow-adjusting-mechanism
 pub type SlowAdjustingFeeUpdate<R> = TargetedFeeAdjustment<
 	R,
 	TargetBlockFullness,
@@ -109,6 +114,7 @@ pub type SlowAdjustingFeeUpdate<R> = TargetedFeeAdjustment<
 /// It expects the passed runtime constants to contain a `weights` module.
 /// The generated weight types were formerly part of the common
 /// runtime but are now runtime dependant.
+///
 #[macro_export]
 macro_rules! impl_runtime_weights {
 	($runtime:ident) => {
@@ -157,7 +163,7 @@ macro_rules! impl_runtime_weights {
 ///
 /// This must only be used as long as the balance type is `u128`.
 pub type CurrencyToVote = frame_support::traits::U128CurrencyToVote;
-static_assertions::assert_eq_size!(primitives::v2::Balance, u128);
+static_assertions::assert_eq_size!(primitives::Balance, u128);
 
 /// A placeholder since there is currently no provided session key handler for parachain validator
 /// keys.

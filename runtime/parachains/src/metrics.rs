@@ -1,27 +1,27 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Runtime declaration of the parachain metrics.
 
-use vine_runtime_metrics::{Counter, CounterVec};
-use primitives::v2::metric_definitions::{
+use polkadot_runtime_metrics::{Counter, CounterVec, Histogram};
+use primitives::metric_definitions::{
 	PARACHAIN_CREATE_INHERENT_BITFIELDS_SIGNATURE_CHECKS,
 	PARACHAIN_INHERENT_DATA_BITFIELDS_PROCESSED, PARACHAIN_INHERENT_DATA_CANDIDATES_PROCESSED,
 	PARACHAIN_INHERENT_DATA_DISPUTE_SETS_INCLUDED, PARACHAIN_INHERENT_DATA_DISPUTE_SETS_PROCESSED,
-	PARACHAIN_INHERENT_DATA_WEIGHT,
+	PARACHAIN_INHERENT_DATA_WEIGHT, PARACHAIN_VERIFY_DISPUTE_SIGNATURE,
 };
 
 pub struct Metrics {
@@ -37,6 +37,9 @@ pub struct Metrics {
 	disputes_included: Counter,
 	/// Counts bitfield signature checks in `enter_inner`.
 	bitfields_signature_checks: CounterVec,
+
+	/// Histogram with the time spent checking a validator signature of a dispute statement
+	signature_timings: Histogram,
 }
 
 impl Metrics {
@@ -98,11 +101,15 @@ impl Metrics {
 	}
 
 	pub fn on_valid_bitfield_signature(&self) {
-		self.bitfields_signature_checks.with_label_values(&["valid"]).inc();
+		self.bitfields_signature_checks.with_label_values(&["valid"]).inc_by(1);
 	}
 
 	pub fn on_invalid_bitfield_signature(&self) {
-		self.bitfields_signature_checks.with_label_values(&["invalid"]).inc();
+		self.bitfields_signature_checks.with_label_values(&["invalid"]).inc_by(1);
+	}
+
+	pub fn on_signature_check_complete(&self, val: u128) {
+		self.signature_timings.observe(val);
 	}
 }
 
@@ -115,4 +122,5 @@ pub const METRICS: Metrics = Metrics {
 	bitfields_signature_checks: CounterVec::new(
 		PARACHAIN_CREATE_INHERENT_BITFIELDS_SIGNATURE_CHECKS,
 	),
+	signature_timings: Histogram::new(PARACHAIN_VERIFY_DISPUTE_SIGNATURE),
 };

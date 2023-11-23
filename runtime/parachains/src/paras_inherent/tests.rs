@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 
@@ -139,7 +139,7 @@ mod enter {
 	#[test]
 	fn test_session_is_tracked_in_on_chain_scraping() {
 		use crate::disputes::run_to_block;
-		use primitives::v2::{
+		use primitives::{
 			DisputeStatement, DisputeStatementSet, ExplicitDisputeStatement,
 			InvalidDisputeStatementKind, ValidDisputeStatementKind,
 		};
@@ -859,8 +859,8 @@ mod enter {
 	}
 }
 
-fn default_header() -> primitives::v2::Header {
-	primitives::v2::Header {
+fn default_header() -> primitives::Header {
+	primitives::Header {
 		parent_hash: Default::default(),
 		number: 0,
 		state_root: Default::default(),
@@ -876,18 +876,17 @@ mod sanitizers {
 		back_candidate, collator_sign_candidate, BackingKind, TestCandidateBuilder,
 	};
 	use bitvec::order::Lsb0;
-	use primitives::v2::{
+	use primitives::{
 		AvailabilityBitfield, GroupIndex, Hash, Id as ParaId, SignedAvailabilityBitfield,
 		ValidatorIndex,
 	};
 	use sp_core::crypto::UncheckedFrom;
 
 	use crate::mock::Test;
-	use futures::executor::block_on;
 	use keyring::Sr25519Keyring;
-	use primitives::v2::PARACHAIN_KEY_TYPE_ID;
+	use primitives::PARACHAIN_KEY_TYPE_ID;
 	use sc_keystore::LocalKeystore;
-	use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+	use sp_keystore::{Keystore, KeystorePtr};
 	use std::sync::Arc;
 
 	fn validator_pubkeys(val_ids: &[keyring::Sr25519Keyring]) -> Vec<ValidatorId> {
@@ -903,7 +902,7 @@ mod sanitizers {
 		let session_index = SessionIndex::from(0_u32);
 
 		let crypto_store = LocalKeystore::in_memory();
-		let crypto_store = Arc::new(crypto_store) as SyncCryptoStorePtr;
+		let crypto_store = Arc::new(crypto_store) as KeystorePtr;
 		let signing_context = SigningContext { parent_hash, session_index };
 
 		let validators = vec![
@@ -913,7 +912,7 @@ mod sanitizers {
 			keyring::Sr25519Keyring::Dave,
 		];
 		for validator in validators.iter() {
-			SyncCryptoStore::sr25519_generate_new(
+			Keystore::sr25519_generate_new(
 				&*crypto_store,
 				PARACHAIN_KEY_TYPE_ID,
 				Some(&validator.to_seed()),
@@ -935,13 +934,13 @@ mod sanitizers {
 		.enumerate()
 		.map(|(vi, ab)| {
 			let validator_index = ValidatorIndex::from(vi as u32);
-			block_on(SignedAvailabilityBitfield::sign(
+			SignedAvailabilityBitfield::sign(
 				&crypto_store,
 				AvailabilityBitfield::from(ab.clone()),
 				&signing_context,
 				validator_index,
 				&validator_public[vi],
-			))
+			)
 			.unwrap()
 			.unwrap()
 			.into_unchecked()
@@ -1142,7 +1141,7 @@ mod sanitizers {
 		let session_index = SessionIndex::from(0_u32);
 
 		let keystore = LocalKeystore::in_memory();
-		let keystore = Arc::new(keystore) as SyncCryptoStorePtr;
+		let keystore = Arc::new(keystore) as KeystorePtr;
 		let signing_context = SigningContext { parent_hash: relay_parent, session_index };
 
 		let validators = vec![
@@ -1152,7 +1151,7 @@ mod sanitizers {
 			keyring::Sr25519Keyring::Dave,
 		];
 		for validator in validators.iter() {
-			SyncCryptoStore::sr25519_generate_new(
+			Keystore::sr25519_generate_new(
 				&*keystore,
 				PARACHAIN_KEY_TYPE_ID,
 				Some(&validator.to_seed()),
@@ -1202,14 +1201,14 @@ mod sanitizers {
 
 				collator_sign_candidate(Sr25519Keyring::One, &mut candidate);
 
-				let backed = block_on(back_candidate(
+				let backed = back_candidate(
 					candidate,
 					&validators,
 					group_validators(GroupIndex::from(idx0 as u32)).unwrap().as_ref(),
 					&keystore,
 					&signing_context,
 					BackingKind::Threshold,
-				));
+				);
 				backed
 			})
 			.collect::<Vec<_>>();

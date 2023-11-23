@@ -1,5 +1,5 @@
 
-= vine Statement table
+= Polkadot Statement table
 
 placeholder
-//TODO Write content :) (https://github.com/paritytech/vine/issues/159)
+//TODO Write content :) (https://github.com/paritytech/polkadot/issues/159)

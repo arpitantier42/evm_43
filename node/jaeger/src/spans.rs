@@ -1,25 +1,25 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-//! vine Jaeger span definitions.
+//! Polkadot Jaeger span definitions.
 //!
 //! ```rust
-//! # use vine_primitives::v2::{CandidateHash, Hash};
+//! # use polkadot_primitives::{CandidateHash, Hash};
 //! # fn main() {
-//! use vine_node_jaeger as jaeger;
+//! use polkadot_node_jaeger as jaeger;
 //!
 //! let relay_parent = Hash::default();
 //! let candidate = CandidateHash::default();
@@ -41,7 +41,7 @@
 //! 		.with_string_fmt_debug_tag("foo", foo)
 //! 		// anything that implements `trait std::str::ToString`
 //! 		.with_string_tag("again", 1337_u32)
-//! 		// add a `Stage` for [`vine-jaeger`](https://github.com/paritytech/vine-jaeger)
+//! 		// add a `Stage` for [`dot-jaeger`](https://github.com/paritytech/dot-jaeger)
 //! 		.with_stage(jaeger::Stage::CandidateBacking);
 //! 		// complete by design, no completion required
 //! # }
@@ -51,9 +51,9 @@
 //! over the course of a function, for this purpose use the non-consuming
 //! `fn` variants, i.e.
 //! ```rust
-//! # use vine_primitives::v2::{CandidateHash, Hash};
+//! # use polkadot_primitives::{CandidateHash, Hash};
 //! # fn main() {
-//! # use vine_node_jaeger as jaeger;
+//! # use polkadot_node_jaeger as jaeger;
 //!
 //! # let relay_parent = Hash::default();
 //! # let candidate = CandidateHash::default();
@@ -84,10 +84,8 @@
 //! ```
 
 use parity_scale_codec::Encode;
-use vine_node_primitives::PoV;
-use vine_primitives::v2::{
-	BlakeTwo256, CandidateHash, Hash, HashT, Id as ParaId, ValidatorIndex,
-};
+use polkadot_node_primitives::PoV;
+use polkadot_primitives::{BlakeTwo256, CandidateHash, Hash, HashT, Id as ParaId, ValidatorIndex};
 use sc_network::PeerId;
 
 use std::{fmt, sync::Arc};
@@ -151,11 +149,12 @@ pub enum Stage {
 	AvailabilityRecovery = 6,
 	BitfieldDistribution = 7,
 	ApprovalChecking = 8,
+	ApprovalDistribution = 9,
 	// Expand as needed, numbers should be ascending according to the stage
 	// through the inclusion pipeline, or according to the descriptions
 	// in [the path of a para chain block]
-	// (https://vine.network/the-path-of-a-parachain-block/)
-	// see [issue](https://github.com/paritytech/vine/issues/2389)
+	// (https://polkadot.network/the-path-of-a-parachain-block/)
+	// see [issue](https://github.com/paritytech/polkadot/issues/2389)
 }
 
 /// A wrapper type for a span.
@@ -285,6 +284,13 @@ impl Span {
 		}
 	}
 
+	/// Attach a 'traceID' tag set to the decimal representation of the candidate hash.
+	#[inline(always)]
+	pub fn with_trace_id(mut self, candidate_hash: CandidateHash) -> Self {
+		self.add_string_tag("traceID", hash_to_trace_identifier(candidate_hash.0));
+		self
+	}
+
 	#[inline(always)]
 	pub fn with_string_tag<V: ToString>(mut self, tag: &'static str, val: V) -> Self {
 		self.add_string_tag::<V>(tag, val);
@@ -292,8 +298,8 @@ impl Span {
 	}
 
 	#[inline(always)]
-	pub fn with_peer_id(self, vine: &PeerId) -> Self {
-		self.with_string_tag("vine-id", &vine.to_base58())
+	pub fn with_peer_id(self, peer: &PeerId) -> Self {
+		self.with_string_tag("peer-id", &peer.to_base58())
 	}
 
 	/// Attach a candidate hash to the span.

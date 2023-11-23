@@ -1,18 +1,18 @@
-// Copyright 2017-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! The statement table: generic implementation.
 //!
@@ -30,7 +30,7 @@ use std::{
 	hash::Hash,
 };
 
-use primitives::v2::{ValidatorSignature, ValidityAttestation as PrimitiveValidityAttestation};
+use primitives::{ValidatorSignature, ValidityAttestation as PrimitiveValidityAttestation};
 
 use parity_scale_codec::{Decode, Encode};
 
@@ -61,7 +61,7 @@ pub trait Context {
 	fn requisite_votes(&self, group: &Self::GroupId) -> usize;
 }
 
-/// Statements circulated among vnes.
+/// Statements circulated among peers.
 #[derive(PartialEq, Eq, Debug, Clone, Encode, Decode)]
 pub enum Statement<Candidate, Digest> {
 	/// Broadcast by an authority to indicate that this is its candidate for inclusion.

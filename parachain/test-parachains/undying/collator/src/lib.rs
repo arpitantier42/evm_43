@@ -1,29 +1,29 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Collator for the `Undying` test parachain.
 
 use futures::channel::oneshot;
 use futures_timer::Delay;
 use parity_scale_codec::{Decode, Encode};
-use vine_node_primitives::{
+use polkadot_node_primitives::{
 	maybe_compress_pov, Collation, CollationResult, CollationSecondedSignal, CollatorFn,
 	MaybeCompressedPoV, PoV, Statement,
 };
-use vine_primitives::v2::{CollatorId, CollatorPair, Hash};
+use polkadot_primitives::{CollatorId, CollatorPair, Hash};
 use sp_core::Pair;
 use std::{
 	collections::HashMap,
@@ -247,8 +247,8 @@ impl Collator {
 			let pov = PoV { block_data: block_data.encode().into() };
 
 			let collation = Collation {
-				upward_messages: Vec::new(),
-				horizontal_messages: Vec::new(),
+				upward_messages: Default::default(),
+				horizontal_messages: Default::default(),
 				new_validation_code: None,
 				head_data: head_data.encode().into(),
 				proof_of_validity: MaybeCompressedPoV::Raw(pov.clone()),
@@ -329,8 +329,8 @@ use sp_core::traits::SpawnNamed;
 mod tests {
 	use super::*;
 	use futures::executor::block_on;
-	use vine_parachain::primitives::{ValidationParams, ValidationResult};
-	use vine_primitives::v2::{Hash, PersistedValidationData};
+	use polkadot_parachain::primitives::{ValidationParams, ValidationResult};
+	use polkadot_primitives::{Hash, PersistedValidationData};
 
 	#[test]
 	fn collator_works() {
@@ -354,7 +354,7 @@ mod tests {
 	}
 
 	fn validate_collation(collator: &Collator, parent_head: HeadData, collation: Collation) {
-		use vine_node_core_pvf::testing::validate_candidate;
+		use polkadot_node_core_pvf_worker::testing::validate_candidate;
 
 		let block_data = match collation.proof_of_validity {
 			MaybeCompressedPoV::Raw(pov) => pov.block_data,

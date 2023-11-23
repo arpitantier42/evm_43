@@ -1,47 +1,46 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Dispute slashing pallet.
 //!
-//! Once a dispute is concluded, we want to slash validators
-//! who were on the wrong side of the dispute. The slashing amount
-//! depends on whether the candidate was valid (small) or invalid (big).
-//! In addition to that, we might want to kick out the validators from the
-//! active set.
+//! Once a dispute is concluded, we want to slash validators who were on the
+//! wrong side of the dispute. The slashing amount depends on whether the
+//! candidate was valid (none at the moment) or invalid (big). In addition to
+//! that, we might want to kick out the validators from the active set.
+//! Currently, we limit slashing to the backing group for invalid disputes.
 //!
 //! The `offences` pallet from Substrate provides us with a way to do both.
-//! Currently, the interface expects us to provide staking information
-//! including nominator exposure in order to submit an offence.
+//! Currently, the interface expects us to provide staking information including
+//! nominator exposure in order to submit an offence.
 //!
 //! Normally, we'd able to fetch this information from the runtime as soon as
 //! the dispute is concluded. This is also what `im-online` pallet does.
 //! However, since a dispute can conclude several sessions after the candidate
 //! was backed (see `dispute_period` in `HostConfiguration`), we can't rely on
-//! this information be available in the context of the current block. The
-//! `babe` and `grandpa` equivocation handlers also have to deal
-//! with this problem.
+//! this information being available in the context of the current block. The
+//! `babe` and `grandpa` equivocation handlers also have to deal with this
+//! problem.
 //!
 //! Our implementation looks like a hybrid of `im-online` and `grandpa`
 //! equivocation handlers. Meaning, we submit an `offence` for the concluded
-//! disputes about the current session candidate directly from the runtime.
-//! If, however, the dispute is about a past session, we record unapplied
-//! slashes on chain, without `FullIdentification` of the offenders.
-//! Later on, a block producer can submit an unsigned transaction with
-//! `KeyOwnershipProof` of an offender and submit it to the runtime
-//! to produce an offence.
+//! disputes about the current session candidate directly from the runtime. If,
+//! however, the dispute is about a past session, we record unapplied slashes on
+//! chain, without `FullIdentification` of the offenders. Later on, a block
+//! producer can submit an unsigned transaction with `KeyOwnershipProof` of an
+//! offender and submit it to the runtime to produce an offence.
 
 use crate::{disputes, initializer::ValidatorSetCount, session_info::IdentificationTuple};
 use frame_support::{
@@ -51,7 +50,7 @@ use frame_support::{
 };
 
 use parity_scale_codec::{Decode, Encode};
-use primitives::v2::{CandidateHash, SessionIndex, ValidatorId, ValidatorIndex};
+use primitives::{CandidateHash, SessionIndex, ValidatorId, ValidatorIndex};
 use scale_info::TypeInfo;
 use sp_runtime::{
 	traits::Convert,
@@ -59,12 +58,15 @@ use sp_runtime::{
 		InvalidTransaction, TransactionPriority, TransactionSource, TransactionValidity,
 		TransactionValidityError, ValidTransaction,
 	},
-	DispatchResult, KeyTypeId, Perbill, RuntimeDebug,
+	KeyTypeId, Perbill, RuntimeDebug,
 };
 use sp_session::{GetSessionNumber, GetValidatorCount};
 use sp_staking::offence::{DisableStrategy, Kind, Offence, OffenceError, ReportOffence};
 use sp_std::{
-	collections::btree_map::{BTreeMap, Entry},
+	collections::{
+		btree_map::{BTreeMap, Entry},
+		btree_set::BTreeSet,
+	},
 	prelude::*,
 };
 
@@ -73,7 +75,7 @@ const LOG_TARGET: &str = "runtime::parachains::slashing";
 // These are constants, but we want to make them configurable
 // via `HostConfiguration` in the future.
 const SLASH_FOR_INVALID: Perbill = Perbill::from_percent(100);
-const SLASH_AGAINST_VALID: Perbill = Perbill::from_perthousand(1);
+const SLASH_AGAINST_VALID: Perbill = Perbill::zero();
 const DEFENSIVE_PROOF: &'static str = "disputes module should bail on old session";
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -151,7 +153,7 @@ where
 		match self.kind {
 			SlashingOffenceKind::ForInvalid => DisableStrategy::Always,
 			// in the future we might change it based on number of disputes initiated:
-			// <https://github.com/paritytech/vine/issues/5946>
+			// <https://github.com/paritytech/polkadot/issues/5946>
 			SlashingOffenceKind::AgainstValid => DisableStrategy::Never,
 		}
 	}
@@ -228,18 +230,30 @@ where
 		candidate_hash: CandidateHash,
 		kind: SlashingOffenceKind,
 		losers: impl IntoIterator<Item = ValidatorIndex>,
+		backers: impl IntoIterator<Item = ValidatorIndex>,
 	) {
-		let losers: Vec<ValidatorIndex> = losers.into_iter().collect();
-		if losers.is_empty() {
-			// Nothing to do
+		// sanity check for the current implementation
+		if kind == SlashingOffenceKind::AgainstValid {
+			debug_assert!(false, "should only slash ForInvalid disputes");
 			return
 		}
+		let losers: BTreeSet<_> = losers.into_iter().collect();
+		if losers.is_empty() {
+			return
+		}
+		let backers: BTreeSet<_> = backers.into_iter().collect();
+		let to_punish: Vec<ValidatorIndex> = losers.intersection(&backers).cloned().collect();
+		if to_punish.is_empty() {
+			return
+		}
+
 		let session_info = crate::session_info::Pallet::<T>::session_info(session_index);
 		let session_info = match session_info.defensive_proof(DEFENSIVE_PROOF) {
 			Some(info) => info,
 			None => return,
 		};
-		let maybe = Self::maybe_identify_validators(session_index, losers.iter().cloned());
+
+		let maybe = Self::maybe_identify_validators(session_index, to_punish.iter().cloned());
 		if let Some(offenders) = maybe {
 			let validator_set_count = session_info.discovery_keys.len() as ValidatorSetCount;
 			let offence = SlashingOffence::new(
@@ -255,12 +269,20 @@ where
 			return
 		}
 
-		let keys = losers
+		let keys = to_punish
 			.into_iter()
 			.filter_map(|i| session_info.validators.get(i).cloned().map(|id| (i, id)))
 			.collect();
 		let unapplied = PendingSlashes { keys, kind };
-		<UnappliedSlashes<T>>::insert(session_index, candidate_hash, unapplied);
+
+		let append = |old: &mut Option<PendingSlashes>| {
+			let old = old
+				.get_or_insert(PendingSlashes { keys: Default::default(), kind: unapplied.kind });
+			debug_assert_eq!(old.kind, unapplied.kind);
+
+			old.keys.extend(unapplied.keys)
+		};
+		<UnappliedSlashes<T>>::mutate(session_index, candidate_hash, append);
 	}
 }
 
@@ -272,18 +294,20 @@ where
 		session_index: SessionIndex,
 		candidate_hash: CandidateHash,
 		losers: impl IntoIterator<Item = ValidatorIndex>,
+		backers: impl IntoIterator<Item = ValidatorIndex>,
 	) {
 		let kind = SlashingOffenceKind::ForInvalid;
-		Self::do_punish(session_index, candidate_hash, kind, losers);
+		Self::do_punish(session_index, candidate_hash, kind, losers, backers);
 	}
 
 	fn punish_against_valid(
-		session_index: SessionIndex,
-		candidate_hash: CandidateHash,
-		losers: impl IntoIterator<Item = ValidatorIndex>,
+		_session_index: SessionIndex,
+		_candidate_hash: CandidateHash,
+		_losers: impl IntoIterator<Item = ValidatorIndex>,
+		_backers: impl IntoIterator<Item = ValidatorIndex>,
 	) {
-		let kind = SlashingOffenceKind::AgainstValid;
-		Self::do_punish(session_index, candidate_hash, kind, losers);
+		// do nothing for now
+		// NOTE: changing that requires modifying `do_punish` implementation
 	}
 
 	fn initializer_initialize(now: T::BlockNumber) -> Weight {
@@ -358,7 +382,7 @@ pub trait HandleReports<T: Config> {
 	fn submit_unsigned_slashing_report(
 		dispute_proof: DisputeProof,
 		key_owner_proof: T::KeyOwnerProof,
-	) -> DispatchResult;
+	) -> Result<(), sp_runtime::TryRuntimeError>;
 }
 
 impl<T: Config> HandleReports<T> for () {
@@ -380,7 +404,7 @@ impl<T: Config> HandleReports<T> for () {
 	fn submit_unsigned_slashing_report(
 		_dispute_proof: DisputeProof,
 		_key_owner_proof: T::KeyOwnerProof,
-	) -> DispatchResult {
+	) -> Result<(), sp_runtime::TryRuntimeError> {
 		Ok(())
 	}
 }
@@ -475,6 +499,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::report_dispute_lost(
 			key_owner_proof.validator_count()
 		))]
@@ -487,7 +512,7 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			// check the membership proof to extract the offender's id
-			let key = (primitives::v2::PARACHAIN_KEY_TYPE_ID, dispute_proof.validator_id.clone());
+			let key = (primitives::PARACHAIN_KEY_TYPE_ID, dispute_proof.validator_id.clone());
 			let offender = T::KeyOwnerProofSystem::check_proof(key, key_owner_proof)
 				.ok_or(Error::<T>::InvalidKeyOwnershipProof)?;
 
@@ -639,7 +664,7 @@ fn is_known_offence<T: Config>(
 	key_owner_proof: &T::KeyOwnerProof,
 ) -> Result<(), TransactionValidityError> {
 	// check the membership proof to extract the offender's id
-	let key = (primitives::v2::PARACHAIN_KEY_TYPE_ID, dispute_proof.validator_id.clone());
+	let key = (primitives::PARACHAIN_KEY_TYPE_ID, dispute_proof.validator_id.clone());
 
 	let offender = T::KeyOwnerProofSystem::check_proof(key, key_owner_proof.clone())
 		.ok_or(InvalidTransaction::BadProof)?;
@@ -705,7 +730,7 @@ where
 	fn submit_unsigned_slashing_report(
 		dispute_proof: DisputeProof,
 		key_owner_proof: <T as Config>::KeyOwnerProof,
-	) -> DispatchResult {
+	) -> Result<(), sp_runtime::TryRuntimeError> {
 		use frame_system::offchain::SubmitTransaction;
 
 		let session_index = dispute_proof.time_slot.session_index;

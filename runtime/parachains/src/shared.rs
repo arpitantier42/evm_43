@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! A pallet for any shared state that other pallets may want access to.
 //!
@@ -20,7 +20,7 @@
 //! dependent on any of the other pallets.
 
 use frame_support::pallet_prelude::*;
-use primitives::v2::{SessionIndex, ValidatorId, ValidatorIndex};
+use primitives::{SessionIndex, ValidatorId, ValidatorIndex};
 use sp_std::vec::Vec;
 
 use rand::{seq::SliceRandom, SeedableRng};
@@ -43,7 +43,6 @@ pub mod pallet {
 	use super::*;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
@@ -124,8 +123,8 @@ impl<T: Config> Pallet<T> {
 		CurrentSessionIndex::<T>::set(index);
 	}
 
-	#[cfg(any(feature = "runtime-benchmarks", test))]
-	pub(crate) fn set_active_validators_ascending(active: Vec<ValidatorId>) {
+	#[cfg(any(feature = "std", feature = "runtime-benchmarks", test))]
+	pub fn set_active_validators_ascending(active: Vec<ValidatorId>) {
 		ActiveValidatorIndices::<T>::set(
 			(0..active.len()).map(|i| ValidatorIndex(i as _)).collect(),
 		);

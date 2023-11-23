@@ -1,25 +1,25 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::{metrics::Metrics, *};
 use assert_matches::assert_matches;
-use futures::executor::{self, block_on};
+use futures::executor;
 use futures_timer::Delay;
 use parity_scale_codec::{Decode, Encode};
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	grid_topology::{SessionGridTopology, TopologyPeerInfo},
 	peer_set::ValidationVersion,
 	request_response::{
@@ -28,24 +28,24 @@ use vine_node_network_protocol::{
 	},
 	view, ObservedRole,
 };
-use vine_node_primitives::{Statement, UncheckedSignedFullStatement};
-use vine_node_subsystem::{
+use polkadot_node_primitives::{Statement, UncheckedSignedFullStatement};
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{network_bridge_event, AllMessages, RuntimeApiMessage, RuntimeApiRequest},
 	ActivatedLeaf, LeafStatus,
 };
-use vine_node_subsystem_test_helpers::mock::make_ferdie_keystore;
-use vine_primitives::v2::{
+use polkadot_node_subsystem_test_helpers::mock::make_ferdie_keystore;
+use polkadot_primitives::{
 	GroupIndex, Hash, Id as ParaId, IndexedVec, SessionInfo, ValidationCode, ValidatorId,
 };
-use vine_primitives_test_helpers::{
+use polkadot_primitives_test_helpers::{
 	dummy_committed_candidate_receipt, dummy_hash, AlwaysZeroRng,
 };
 use sc_keystore::LocalKeystore;
-use sp_application_crypto::{sr25519::Pair, AppKey, Pair as TraitPair};
+use sp_application_crypto::{sr25519::Pair, AppCrypto, Pair as TraitPair};
 use sp_authority_discovery::AuthorityPair;
 use sp_keyring::Sr25519Keyring;
-use sp_keystore::{CryptoStore, SyncCryptoStore, SyncCryptoStorePtr};
+use sp_keystore::{Keystore, KeystorePtr};
 use std::{iter::FromIterator as _, sync::Arc, time::Duration};
 
 // Some deterministic genesis hash for protocol names
@@ -90,14 +90,14 @@ fn active_head_accepts_only_2_seconded_per_validator() {
 		PerLeafSpan::new(Arc::new(jaeger::Span::Disabled), "test"),
 	);
 
-	let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-	let alice_public = SyncCryptoStore::sr25519_generate_new(
+	let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+	let alice_public = Keystore::sr25519_generate_new(
 		&*keystore,
 		ValidatorId::ID,
 		Some(&Sr25519Keyring::Alice.to_seed()),
 	)
 	.unwrap();
-	let bob_public = SyncCryptoStore::sr25519_generate_new(
+	let bob_public = Keystore::sr25519_generate_new(
 		&*keystore,
 		ValidatorId::ID,
 		Some(&Sr25519Keyring::Bob.to_seed()),
@@ -105,13 +105,13 @@ fn active_head_accepts_only_2_seconded_per_validator() {
 	.unwrap();
 
 	// note A
-	let a_seconded_val_0 = block_on(SignedFullStatement::sign(
+	let a_seconded_val_0 = SignedFullStatement::sign(
 		&keystore,
 		Statement::Seconded(candidate_a.clone()),
 		&signing_context,
 		ValidatorIndex(0),
 		&alice_public.into(),
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -132,13 +132,13 @@ fn active_head_accepts_only_2_seconded_per_validator() {
 	assert_matches!(noted, NotedStatement::UsefulButKnown);
 
 	// note B
-	let statement = block_on(SignedFullStatement::sign(
+	let statement = SignedFullStatement::sign(
 		&keystore,
 		Statement::Seconded(candidate_b.clone()),
 		&signing_context,
 		ValidatorIndex(0),
 		&alice_public.into(),
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -149,13 +149,13 @@ fn active_head_accepts_only_2_seconded_per_validator() {
 	assert_matches!(noted, NotedStatement::Fresh(_));
 
 	// note C (beyond 2 - ignored)
-	let statement = block_on(SignedFullStatement::sign(
+	let statement = SignedFullStatement::sign(
 		&keystore,
 		Statement::Seconded(candidate_c.clone()),
 		&signing_context,
 		ValidatorIndex(0),
 		&alice_public.into(),
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -167,13 +167,13 @@ fn active_head_accepts_only_2_seconded_per_validator() {
 	assert_matches!(noted, NotedStatement::NotUseful);
 
 	// note B (new validator)
-	let statement = block_on(SignedFullStatement::sign(
+	let statement = SignedFullStatement::sign(
 		&keystore,
 		Statement::Seconded(candidate_b.clone()),
 		&signing_context,
 		ValidatorIndex(1),
 		&bob_public.into(),
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -184,13 +184,13 @@ fn active_head_accepts_only_2_seconded_per_validator() {
 	assert_matches!(noted, NotedStatement::Fresh(_));
 
 	// note C (new validator)
-	let statement = block_on(SignedFullStatement::sign(
+	let statement = SignedFullStatement::sign(
 		&keystore,
 		Statement::Seconded(candidate_c.clone()),
 		&signing_context,
 		ValidatorIndex(1),
 		&bob_public.into(),
-	))
+	)
 	.ok()
 	.flatten()
 	.expect("should be signed");
@@ -251,7 +251,7 @@ fn per_peer_relay_parent_knowledge_send() {
 	assert!(knowledge.seconded_counts.is_empty());
 	assert!(knowledge.received_message_count.is_empty());
 
-	// Make the vine aware of the candidate.
+	// Make the peer aware of the candidate.
 	assert_eq!(knowledge.send(&(CompactStatement::Seconded(hash_a), ValidatorIndex(0))), true);
 	assert_eq!(knowledge.send(&(CompactStatement::Seconded(hash_a), ValidatorIndex(1))), false);
 	assert!(knowledge.is_known_candidate(&hash_a));
@@ -408,21 +408,21 @@ fn peer_view_update_sends_messages() {
 	let session_index = 1;
 	let signing_context = SigningContext { parent_hash: hash_c, session_index };
 
-	let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
+	let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
 
-	let alice_public = SyncCryptoStore::sr25519_generate_new(
+	let alice_public = Keystore::sr25519_generate_new(
 		&*keystore,
 		ValidatorId::ID,
 		Some(&Sr25519Keyring::Alice.to_seed()),
 	)
 	.unwrap();
-	let bob_public = SyncCryptoStore::sr25519_generate_new(
+	let bob_public = Keystore::sr25519_generate_new(
 		&*keystore,
 		ValidatorId::ID,
 		Some(&Sr25519Keyring::Bob.to_seed()),
 	)
 	.unwrap();
-	let charlie_public = SyncCryptoStore::sr25519_generate_new(
+	let charlie_public = Keystore::sr25519_generate_new(
 		&*keystore,
 		ValidatorId::ID,
 		Some(&Sr25519Keyring::Charlie.to_seed()),
@@ -436,13 +436,13 @@ fn peer_view_update_sends_messages() {
 			PerLeafSpan::new(Arc::new(jaeger::Span::Disabled), "test"),
 		);
 
-		let statement = block_on(SignedFullStatement::sign(
+		let statement = SignedFullStatement::sign(
 			&keystore,
 			Statement::Seconded(candidate.clone()),
 			&signing_context,
 			ValidatorIndex(0),
 			&alice_public.into(),
-		))
+		)
 		.ok()
 		.flatten()
 		.expect("should be signed");
@@ -453,13 +453,13 @@ fn peer_view_update_sends_messages() {
 
 		assert_matches!(noted, NotedStatement::Fresh(_));
 
-		let statement = block_on(SignedFullStatement::sign(
+		let statement = SignedFullStatement::sign(
 			&keystore,
 			Statement::Valid(candidate_hash),
 			&signing_context,
 			ValidatorIndex(1),
 			&bob_public.into(),
-		))
+		)
 		.ok()
 		.flatten()
 		.expect("should be signed");
@@ -470,13 +470,13 @@ fn peer_view_update_sends_messages() {
 
 		assert_matches!(noted, NotedStatement::Fresh(_));
 
-		let statement = block_on(SignedFullStatement::sign(
+		let statement = SignedFullStatement::sign(
 			&keystore,
 			Statement::Valid(candidate_hash),
 			&signing_context,
 			ValidatorIndex(2),
 			&charlie_public.into(),
-		))
+		)
 		.ok()
 		.flatten()
 		.expect("should be signed");
@@ -505,17 +505,17 @@ fn peer_view_update_sends_messages() {
 	};
 
 	let pool = sp_core::testing::TaskExecutor::new();
-	let (mut ctx, mut handle) = vine_node_subsystem_test_helpers::make_subsystem_context::<
+	let (mut ctx, mut handle) = polkadot_node_subsystem_test_helpers::make_subsystem_context::<
 		StatementDistributionMessage,
 		_,
 	>(pool);
-	let vine = PeerId::random();
+	let peer = PeerId::random();
 
 	executor::block_on(async move {
 		let mut topology = GridNeighbors::empty();
-		topology.peers_x = HashSet::from_iter(vec![vine.clone()].into_iter());
+		topology.peers_x = HashSet::from_iter(vec![peer.clone()].into_iter());
 		update_peer_view_and_maybe_send_unlocked(
-			vine.clone(),
+			peer.clone(),
 			&topology,
 			&mut peer_data,
 			&mut ctx,
@@ -550,7 +550,7 @@ fn peer_view_update_sends_messages() {
 		// it will not change between runs of the program.
 		for statement in active_head.statements_about(candidate_hash) {
 			let message = handle.recv().await;
-			let expected_to = vec![vine.clone()];
+			let expected_to = vec![peer.clone()];
 			let expected_payload =
 				statement_message(hash_c, statement.statement.clone(), &Metrics::default());
 
@@ -606,7 +606,7 @@ fn circulated_statement_goes_to_all_peers_with_view() {
 	.collect();
 
 	let pool = sp_core::testing::TaskExecutor::new();
-	let (mut ctx, mut handle) = vine_node_subsystem_test_helpers::make_subsystem_context::<
+	let (mut ctx, mut handle) = polkadot_node_subsystem_test_helpers::make_subsystem_context::<
 		StatementDistributionMessage,
 		_,
 	>(pool);
@@ -614,13 +614,12 @@ fn circulated_statement_goes_to_all_peers_with_view() {
 	executor::block_on(async move {
 		let signing_context = SigningContext { parent_hash: hash_b, session_index };
 
-		let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-		let alice_public = CryptoStore::sr25519_generate_new(
+		let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+		let alice_public = Keystore::sr25519_generate_new(
 			&*keystore,
 			ValidatorId::ID,
 			Some(&Sr25519Keyring::Alice.to_seed()),
 		)
-		.await
 		.unwrap();
 
 		let statement = SignedFullStatement::sign(
@@ -630,7 +629,6 @@ fn circulated_statement_goes_to_all_peers_with_view() {
 			ValidatorIndex(0),
 			&alice_public.into(),
 		)
-		.await
 		.ok()
 		.flatten()
 		.expect("should be signed");
@@ -729,7 +727,7 @@ fn receiving_from_one_sends_to_another_and_to_candidate_backing() {
 	let session_index = 1;
 
 	let pool = sp_core::testing::TaskExecutor::new();
-	let (ctx, mut handle) = vine_node_subsystem_test_helpers::make_subsystem_context(pool);
+	let (ctx, mut handle) = polkadot_node_subsystem_test_helpers::make_subsystem_context(pool);
 
 	let req_protocol_names = ReqProtocolNames::new(&GENESIS_HASH, None);
 	let (statement_req_receiver, _) = IncomingRequest::get_config_receiver(&req_protocol_names);
@@ -822,18 +820,17 @@ fn receiving_from_one_sends_to_another_and_to_candidate_backing() {
 			})
 			.await;
 
-		// receive a seconded statement from vine A. it should be propagated onwards to vine B and to
+		// receive a seconded statement from peer A. it should be propagated onwards to peer B and to
 		// candidate backing.
 		let statement = {
 			let signing_context = SigningContext { parent_hash: hash_a, session_index };
 
-			let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-			let alice_public = CryptoStore::sr25519_generate_new(
+			let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+			let alice_public = Keystore::sr25519_generate_new(
 				&*keystore,
 				ValidatorId::ID,
 				Some(&Sr25519Keyring::Alice.to_seed()),
 			)
-			.await
 			.unwrap();
 
 			SignedFullStatement::sign(
@@ -843,7 +840,6 @@ fn receiving_from_one_sends_to_another_and_to_candidate_backing() {
 				ValidatorIndex(0),
 				&alice_public.into(),
 			)
-			.await
 			.ok()
 			.flatten()
 			.expect("should be signed")
@@ -933,7 +929,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 	let session_index = 1;
 
 	let pool = sp_core::testing::TaskExecutor::new();
-	let (ctx, mut handle) = vine_node_subsystem_test_helpers::make_subsystem_context(pool);
+	let (ctx, mut handle) = polkadot_node_subsystem_test_helpers::make_subsystem_context(pool);
 
 	let req_protocol_names = ReqProtocolNames::new(&GENESIS_HASH, None);
 	let (statement_req_receiver, mut req_cfg) =
@@ -1065,19 +1061,18 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 			})
 			.await;
 
-		// receive a seconded statement from vine A, which does not provide the request data,
-		// then get that data from vine C. It should be propagated onwards to vine B and to
+		// receive a seconded statement from peer A, which does not provide the request data,
+		// then get that data from peer C. It should be propagated onwards to peer B and to
 		// candidate backing.
 		let statement = {
 			let signing_context = SigningContext { parent_hash: hash_a, session_index };
 
-			let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-			let alice_public = CryptoStore::sr25519_generate_new(
+			let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+			let alice_public = Keystore::sr25519_generate_new(
 				&*keystore,
 				ValidatorId::ID,
 				Some(&Sr25519Keyring::Alice.to_seed()),
 			)
-			.await
 			.unwrap();
 
 			SignedFullStatement::sign(
@@ -1087,7 +1082,6 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 				ValidatorIndex(0),
 				&alice_public.into(),
 			)
-			.await
 			.ok()
 			.flatten()
 			.expect("should be signed")
@@ -1123,7 +1117,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 				let req = outgoing.payload;
 				assert_eq!(req.relay_parent, metadata.relay_parent);
 				assert_eq!(req.candidate_hash, metadata.candidate_hash);
-				assert_eq!(outgoing.vine, Recipient::Peer(peer_a));
+				assert_eq!(outgoing.peer, Recipient::Peer(peer_a));
 				// Just drop request - should trigger error.
 			}
 		);
@@ -1146,7 +1140,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 			})
 			.await;
 
-		// Malicious vine:
+		// Malicious peer:
 		handle
 			.send(FromOrchestra::Communication {
 				msg: StatementDistributionMessage::NetworkBridgeUpdate(
@@ -1176,7 +1170,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 				let req = outgoing.payload;
 				assert_eq!(req.relay_parent, metadata.relay_parent);
 				assert_eq!(req.candidate_hash, metadata.candidate_hash);
-				assert_eq!(outgoing.vine, Recipient::Peer(peer_c));
+				assert_eq!(outgoing.peer, Recipient::Peer(peer_c));
 			}
 		);
 
@@ -1197,7 +1191,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 				assert_eq!(req.relay_parent, metadata.relay_parent);
 				assert_eq!(req.candidate_hash, metadata.candidate_hash);
 				// On retry, we should have reverse order:
-				assert_eq!(outgoing.vine, Recipient::Peer(peer_a));
+				assert_eq!(outgoing.peer, Recipient::Peer(peer_a));
 			}
 		);
 
@@ -1217,7 +1211,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 				let req = outgoing.payload;
 				assert_eq!(req.relay_parent, metadata.relay_parent);
 				assert_eq!(req.candidate_hash, metadata.candidate_hash);
-				assert_eq!(outgoing.vine, Recipient::Peer(peer_bad));
+				assert_eq!(outgoing.peer, Recipient::Peer(peer_bad));
 				let bad_candidate = {
 					let mut bad = candidate.clone();
 					bad.descriptor.para_id = 0xeadbeaf.into();
@@ -1253,7 +1247,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 				assert_eq!(req.relay_parent, metadata.relay_parent);
 				assert_eq!(req.candidate_hash, metadata.candidate_hash);
 				// On retry, we should have reverse order:
-				assert_eq!(outgoing.vine, Recipient::Peer(peer_a));
+				assert_eq!(outgoing.peer, Recipient::Peer(peer_a));
 			}
 		);
 
@@ -1274,7 +1268,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 				assert_eq!(req.relay_parent, metadata.relay_parent);
 				assert_eq!(req.candidate_hash, metadata.candidate_hash);
 				// On retry, we should have reverse order:
-				assert_eq!(outgoing.vine, Recipient::Peer(peer_c));
+				assert_eq!(outgoing.peer, Recipient::Peer(peer_c));
 				let response = StatementFetchingResponse::Statement(candidate.clone());
 				outgoing.pending_response.send(Ok(response.encode())).unwrap();
 			}
@@ -1345,7 +1339,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 			candidate_hash: metadata.candidate_hash,
 		};
 		let req = sc_network::config::IncomingRequest {
-			vine: peer_b,
+			peer: peer_b,
 			payload: inner_req.encode(),
 			pending_response,
 		};
@@ -1363,7 +1357,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 			candidate_hash: metadata.candidate_hash,
 		};
 		let req = sc_network::config::IncomingRequest {
-			vine: peer_a,
+			peer: peer_a,
 			payload: inner_req.encode(),
 			pending_response,
 		};
@@ -1380,7 +1374,7 @@ fn receiving_large_statement_from_one_sends_to_another_and_to_candidate_backing(
 			candidate_hash: metadata.candidate_hash,
 		};
 		let req = sc_network::config::IncomingRequest {
-			vine: peer_b,
+			peer: peer_b,
 			payload: inner_req.encode(),
 			pending_response,
 		};
@@ -1447,7 +1441,7 @@ fn share_prioritizes_backing_group() {
 	let session_index = 1;
 
 	let pool = sp_core::testing::TaskExecutor::new();
-	let (ctx, mut handle) = vine_node_subsystem_test_helpers::make_subsystem_context(pool);
+	let (ctx, mut handle) = polkadot_node_subsystem_test_helpers::make_subsystem_context(pool);
 
 	let req_protocol_names = ReqProtocolNames::new(&GENESIS_HASH, None);
 	let (statement_req_receiver, mut req_cfg) =
@@ -1499,12 +1493,12 @@ fn share_prioritizes_backing_group() {
 		);
 
 		// notify of dummy peers and view
-		for (vine, pair) in dummy_peers.clone().into_iter().zip(dummy_pairs) {
+		for (peer, pair) in dummy_peers.clone().into_iter().zip(dummy_pairs) {
 			handle
 				.send(FromOrchestra::Communication {
 					msg: StatementDistributionMessage::NetworkBridgeUpdate(
 						NetworkBridgeEvent::PeerConnected(
-							vine,
+							peer,
 							ObservedRole::Full,
 							ValidationVersion::V1.into(),
 							Some(HashSet::from([pair.public().into()])),
@@ -1516,7 +1510,7 @@ fn share_prioritizes_backing_group() {
 			handle
 				.send(FromOrchestra::Communication {
 					msg: StatementDistributionMessage::NetworkBridgeUpdate(
-						NetworkBridgeEvent::PeerViewChange(vine, view![hash_a]),
+						NetworkBridgeEvent::PeerViewChange(peer, view![hash_a]),
 					),
 				})
 				.await;
@@ -1621,19 +1615,18 @@ fn share_prioritizes_backing_group() {
 			})
 			.await;
 
-		// receive a seconded statement from vine A, which does not provide the request data,
-		// then get that data from vine C. It should be propagated onwards to vine B and to
+		// receive a seconded statement from peer A, which does not provide the request data,
+		// then get that data from peer C. It should be propagated onwards to peer B and to
 		// candidate backing.
 		let statement = {
 			let signing_context = SigningContext { parent_hash: hash_a, session_index };
 
-			let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-			let ferdie_public = CryptoStore::sr25519_generate_new(
+			let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+			let ferdie_public = Keystore::sr25519_generate_new(
 				&*keystore,
 				ValidatorId::ID,
 				Some(&Sr25519Keyring::Ferdie.to_seed()),
 			)
-			.await
 			.unwrap();
 
 			SignedFullStatement::sign(
@@ -1643,7 +1636,6 @@ fn share_prioritizes_backing_group() {
 				ValidatorIndex(4),
 				&ferdie_public.into(),
 			)
-			.await
 			.ok()
 			.flatten()
 			.expect("should be signed")
@@ -1695,7 +1687,7 @@ fn share_prioritizes_backing_group() {
 			candidate_hash: metadata.candidate_hash,
 		};
 		let req = sc_network::config::IncomingRequest {
-			vine: peer_b,
+			peer: peer_b,
 			payload: inner_req.encode(),
 			pending_response,
 		};
@@ -1744,7 +1736,7 @@ fn peer_cant_flood_with_large_statements() {
 	let session_index = 1;
 
 	let pool = sp_core::testing::TaskExecutor::new();
-	let (ctx, mut handle) = vine_node_subsystem_test_helpers::make_subsystem_context(pool);
+	let (ctx, mut handle) = polkadot_node_subsystem_test_helpers::make_subsystem_context(pool);
 
 	let req_protocol_names = ReqProtocolNames::new(&GENESIS_HASH, None);
 	let (statement_req_receiver, _) = IncomingRequest::get_config_receiver(&req_protocol_names);
@@ -1815,17 +1807,16 @@ fn peer_cant_flood_with_large_statements() {
 			})
 			.await;
 
-		// receive a seconded statement from vine A.
+		// receive a seconded statement from peer A.
 		let statement = {
 			let signing_context = SigningContext { parent_hash: hash_a, session_index };
 
-			let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-			let alice_public = CryptoStore::sr25519_generate_new(
+			let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+			let alice_public = Keystore::sr25519_generate_new(
 				&*keystore,
 				ValidatorId::ID,
 				Some(&Sr25519Keyring::Alice.to_seed()),
 			)
-			.await
 			.unwrap();
 
 			SignedFullStatement::sign(
@@ -1835,7 +1826,6 @@ fn peer_cant_flood_with_large_statements() {
 				ValidatorIndex(0),
 				&alice_public.into(),
 			)
-			.await
 			.ok()
 			.flatten()
 			.expect("should be signed")
@@ -1860,7 +1850,7 @@ fn peer_cant_flood_with_large_statements() {
 				.await;
 		}
 
-		// We should try to fetch the data and punish the vine (but we don't know what comes
+		// We should try to fetch the data and punish the peer (but we don't know what comes
 		// first):
 		let mut requested = false;
 		let mut punished = false;
@@ -1878,7 +1868,7 @@ fn peer_cant_flood_with_large_statements() {
 					let req = outgoing.payload;
 					assert_eq!(req.relay_parent, metadata.relay_parent);
 					assert_eq!(req.candidate_hash, metadata.candidate_hash);
-					assert_eq!(outgoing.vine, Recipient::Peer(peer_a));
+					assert_eq!(outgoing.peer, Recipient::Peer(peer_a));
 					// Just drop request - should trigger error.
 					requested = true;
 				},
@@ -1906,7 +1896,7 @@ fn peer_cant_flood_with_large_statements() {
 
 // This test addresses an issue when received knowledge is not updated on a
 // subsequent `Seconded` statements
-// See https://github.com/paritytech/vine/pull/5177
+// See https://github.com/paritytech/polkadot/pull/5177
 #[test]
 fn handle_multiple_seconded_statements() {
 	let relay_parent_hash = Hash::repeat_byte(1);
@@ -1949,7 +1939,7 @@ fn handle_multiple_seconded_statements() {
 	let session_index = 1;
 
 	let pool = sp_core::testing::TaskExecutor::new();
-	let (ctx, mut handle) = vine_node_subsystem_test_helpers::make_subsystem_context(pool);
+	let (ctx, mut handle) = polkadot_node_subsystem_test_helpers::make_subsystem_context(pool);
 
 	let req_protocol_names = ReqProtocolNames::new(&GENESIS_HASH, None);
 	let (statement_req_receiver, _) = IncomingRequest::get_config_receiver(&req_protocol_names);
@@ -2000,12 +1990,12 @@ fn handle_multiple_seconded_statements() {
 		);
 
 		// notify of peers and view
-		for vine in all_peers.iter() {
+		for peer in all_peers.iter() {
 			handle
 				.send(FromOrchestra::Communication {
 					msg: StatementDistributionMessage::NetworkBridgeUpdate(
 						NetworkBridgeEvent::PeerConnected(
-							vine.clone(),
+							peer.clone(),
 							ObservedRole::Full,
 							ValidationVersion::V1.into(),
 							None,
@@ -2016,7 +2006,7 @@ fn handle_multiple_seconded_statements() {
 			handle
 				.send(FromOrchestra::Communication {
 					msg: StatementDistributionMessage::NetworkBridgeUpdate(
-						NetworkBridgeEvent::PeerViewChange(vine.clone(), view![relay_parent_hash]),
+						NetworkBridgeEvent::PeerViewChange(peer.clone(), view![relay_parent_hash]),
 					),
 				})
 				.await;
@@ -2103,18 +2093,17 @@ fn handle_multiple_seconded_statements() {
 			})
 			.await;
 
-		// receive a seconded statement from vine A. it should be propagated onwards to vine B and to
+		// receive a seconded statement from peer A. it should be propagated onwards to peer B and to
 		// candidate backing.
 		let statement = {
 			let signing_context = SigningContext { parent_hash: relay_parent_hash, session_index };
 
-			let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-			let alice_public = CryptoStore::sr25519_generate_new(
+			let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+			let alice_public = Keystore::sr25519_generate_new(
 				&*keystore,
 				ValidatorId::ID,
 				Some(&Sr25519Keyring::Alice.to_seed()),
 			)
-			.await
 			.unwrap();
 
 			SignedFullStatement::sign(
@@ -2124,7 +2113,6 @@ fn handle_multiple_seconded_statements() {
 				ValidatorIndex(0),
 				&alice_public.into(),
 			)
-			.await
 			.ok()
 			.flatten()
 			.expect("should be signed")
@@ -2211,13 +2199,12 @@ fn handle_multiple_seconded_statements() {
 		let statement = {
 			let signing_context = SigningContext { parent_hash: relay_parent_hash, session_index };
 
-			let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-			let alice_public = CryptoStore::sr25519_generate_new(
+			let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+			let alice_public = Keystore::sr25519_generate_new(
 				&*keystore,
 				ValidatorId::ID,
 				Some(&Sr25519Keyring::Alice.to_seed()),
 			)
-			.await
 			.unwrap();
 
 			SignedFullStatement::sign(
@@ -2227,7 +2214,6 @@ fn handle_multiple_seconded_statements() {
 				ValidatorIndex(0),
 				&alice_public.into(),
 			)
-			.await
 			.ok()
 			.flatten()
 			.expect("should be signed")

@@ -1,26 +1,26 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 #![warn(missing_docs)]
 
 //! A crate that implements the PVF validation host.
 //!
 //! For more background, refer to the Implementer's Guide: [PVF
-//! Pre-checking](https://paritytech.github.io/vine/book/pvf-prechecking.html) and [Candidate
-//! Validation](https://paritytech.github.io/vine/book/node/utility/candidate-validation.html#pvf-host).
+//! Pre-checking](https://paritytech.github.io/polkadot/book/pvf-prechecking.html) and [Candidate
+//! Validation](https://paritytech.github.io/polkadot/book/node/utility/candidate-validation.html#pvf-host).
 //!
 //! # Entrypoint
 //!
@@ -29,11 +29,11 @@
 //!
 //! Then using the handle the client can send three types of requests:
 //!
-//! (a) PVF pre-checking. This takes the PVF [code][`Pvf`] and tries to prepare it (verify and
+//! (a) PVF pre-checking. This takes the `Pvf` code and tries to prepare it (verify and
 //! compile) in order to pre-check its validity.
 //!
-//! (b) PVF execution. This accepts the PVF [`params`][`vine_parachain::primitives::ValidationParams`]
-//!     and the PVF [code][`Pvf`], prepares (verifies and compiles) the code, and then executes PVF
+//! (b) PVF execution. This accepts the PVF [`params`][`polkadot_parachain::primitives::ValidationParams`]
+//!     and the `Pvf` code, prepares (verifies and compiles) the code, and then executes PVF
 //!     with the `params`.
 //!
 //! (c) Heads up. This request allows to signal that the given PVF may be needed soon and that it
@@ -72,14 +72,12 @@
 //! ## Artifacts
 //!
 //! An artifact is the final product of preparation. If the preparation succeeded, then the artifact
-//! will contain the compiled code usable for quick execution by a worker later on.
-//!
-//! If the preparation failed, then the worker will still write the artifact with the error message.
-//! We save the artifact with the error so that we don't try to prepare the artifacts that are broken
-//! repeatedly.
+//! will contain the compiled code usable for quick execution by a worker later on. If the
+//! preparation failed, then no artifact is created.
 //!
 //! The artifact is saved on disk and is also tracked by an in memory table. This in memory table
-//! doesn't contain the artifact contents though, only a flag that the given artifact is compiled.
+//! doesn't contain the artifact contents though, only a flag for the state of the given artifact
+//! and some associated data. If the artifact failed to process, this also includes the error.
 //!
 //! A pruning task will run at a fixed interval of time. This task will remove all artifacts that
 //! weren't used or received a heads up signal for a while.
@@ -88,12 +86,11 @@
 //!
 //! The execute workers will be fed by the requests from the execution queue, which is basically a
 //! combination of a path to the compiled artifact and the
-//! [`params`][`vine_parachain::primitives::ValidationParams`].
+//! [`params`][`polkadot_parachain::primitives::ValidationParams`].
 
 mod artifacts;
 mod error;
 mod execute;
-mod executor_intf;
 mod host;
 mod metrics;
 mod prepare;
@@ -101,25 +98,24 @@ mod priority;
 mod pvf;
 mod worker_common;
 
-#[doc(hidden)]
-pub mod testing;
-
-#[doc(hidden)]
-pub use sp_tracing;
-
-pub use error::{InvalidCandidate, PrepareError, PrepareResult, ValidationError};
+pub use artifacts::CompiledArtifact;
+pub use error::{
+	InternalValidationError, InvalidCandidate, PrepareError, PrepareResult, ValidationError,
+};
+pub use execute::{ExecuteHandshake, ExecuteResponse};
+#[cfg(any(target_os = "linux", feature = "jemalloc-allocator"))]
+pub use prepare::MemoryAllocationStats;
+pub use prepare::{MemoryStats, PrepareStats};
 pub use priority::Priority;
-pub use pvf::Pvf;
+pub use pvf::PvfPrepData;
 
 pub use host::{start, Config, ValidationHost};
 pub use metrics::Metrics;
-
-pub use execute::worker_entrypoint as execute_worker_entrypoint;
-pub use prepare::worker_entrypoint as prepare_worker_entrypoint;
-
-pub use executor_intf::{prepare, prevalidate};
-
-pub use sc_executor_common;
-pub use sp_maybe_compressed_blob;
+pub use worker_common::{framed_recv, framed_send, JOB_TIMEOUT_WALL_CLOCK_FACTOR};
 
 const LOG_TARGET: &str = "parachain::pvf";
+
+#[doc(hidden)]
+pub mod testing {
+	pub use crate::worker_common::{spawn_with_program_path, SpawnErr};
+}

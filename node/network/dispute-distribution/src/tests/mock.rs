@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 //! Mock data and utility functions for unit tests in this subsystem.
@@ -26,18 +26,18 @@ use std::{
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 
-use vine_node_network_protocol::{authority_discovery::AuthorityDiscovery, PeerId};
+use polkadot_node_network_protocol::{authority_discovery::AuthorityDiscovery, PeerId};
 use sc_keystore::LocalKeystore;
-use sp_application_crypto::AppKey;
+use sp_application_crypto::AppCrypto;
 use sp_keyring::Sr25519Keyring;
-use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
+use sp_keystore::{Keystore, KeystorePtr};
 
-use vine_node_primitives::{DisputeMessage, SignedDisputeStatement};
-use vine_primitives::v2::{
+use polkadot_node_primitives::{DisputeMessage, SignedDisputeStatement};
+use polkadot_primitives::{
 	AuthorityDiscoveryId, CandidateHash, CandidateReceipt, Hash, SessionIndex, SessionInfo,
 	ValidatorId, ValidatorIndex,
 };
-use vine_primitives_test_helpers::dummy_candidate_descriptor;
+use polkadot_primitives_test_helpers::dummy_candidate_descriptor;
 
 use crate::LOG_TARGET;
 
@@ -126,13 +126,13 @@ pub fn make_candidate_receipt(relay_parent: Hash) -> CandidateReceipt {
 	}
 }
 
-pub async fn make_explicit_signed(
+pub fn make_explicit_signed(
 	validator: Sr25519Keyring,
 	candidate_hash: CandidateHash,
 	valid: bool,
 ) -> SignedDisputeStatement {
-	let keystore: SyncCryptoStorePtr = Arc::new(LocalKeystore::in_memory());
-	SyncCryptoStore::sr25519_generate_new(&*keystore, ValidatorId::ID, Some(&validator.to_seed()))
+	let keystore: KeystorePtr = Arc::new(LocalKeystore::in_memory());
+	Keystore::sr25519_generate_new(&*keystore, ValidatorId::ID, Some(&validator.to_seed()))
 		.expect("Insert key into keystore");
 
 	SignedDisputeStatement::sign_explicit(
@@ -142,12 +142,11 @@ pub async fn make_explicit_signed(
 		MOCK_SESSION_INDEX,
 		validator.public().into(),
 	)
-	.await
 	.expect("Keystore should be fine.")
 	.expect("Signing should work.")
 }
 
-pub async fn make_dispute_message(
+pub fn make_dispute_message(
 	candidate: CandidateReceipt,
 	valid_validator: ValidatorIndex,
 	invalid_validator: ValidatorIndex,
@@ -155,16 +154,14 @@ pub async fn make_dispute_message(
 	let candidate_hash = candidate.hash();
 	let before_request = Instant::now();
 	let valid_vote =
-		make_explicit_signed(MOCK_VALIDATORS[valid_validator.0 as usize], candidate_hash, true)
-			.await;
+		make_explicit_signed(MOCK_VALIDATORS[valid_validator.0 as usize], candidate_hash, true);
 	gum::trace!(
 		"Passed time for valid vote: {:#?}",
 		Instant::now().saturating_duration_since(before_request)
 	);
 	let before_request = Instant::now();
 	let invalid_vote =
-		make_explicit_signed(MOCK_VALIDATORS[invalid_validator.0 as usize], candidate_hash, false)
-			.await;
+		make_explicit_signed(MOCK_VALIDATORS[invalid_validator.0 as usize], candidate_hash, false);
 	gum::trace!(
 		"Passed time for invald vote: {:#?}",
 		Instant::now().saturating_duration_since(before_request)
@@ -210,15 +207,15 @@ impl MockAuthorityDiscovery {
 impl AuthorityDiscovery for MockAuthorityDiscovery {
 	async fn get_addresses_by_authority_id(
 		&mut self,
-		_authority: vine_primitives::v2::AuthorityDiscoveryId,
+		_authority: polkadot_primitives::AuthorityDiscoveryId,
 	) -> Option<HashSet<sc_network::Multiaddr>> {
 		panic!("Not implemented");
 	}
 
 	async fn get_authority_ids_by_peer_id(
 		&mut self,
-		peer_id: vine_node_network_protocol::PeerId,
-	) -> Option<HashSet<vine_primitives::v2::AuthorityDiscoveryId>> {
+		peer_id: polkadot_node_network_protocol::PeerId,
+	) -> Option<HashSet<polkadot_primitives::AuthorityDiscoveryId>> {
 		for (a, p) in self.peer_ids.iter() {
 			if p == &peer_id {
 				let result =
@@ -227,7 +224,7 @@ impl AuthorityDiscovery for MockAuthorityDiscovery {
 					target: LOG_TARGET,
 					%peer_id,
 					?result,
-					"Returning authority ids for vine id"
+					"Returning authority ids for peer id"
 				);
 				return Some(result)
 			}

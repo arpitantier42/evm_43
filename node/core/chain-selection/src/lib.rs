@@ -1,30 +1,30 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Implements the Chain Selection Subsystem.
 
-use vine_node_primitives::BlockWeight;
-use vine_node_subsystem::{
+use polkadot_node_primitives::BlockWeight;
+use polkadot_node_subsystem::{
 	errors::ChainApiError,
 	messages::{ChainApiMessage, ChainSelectionMessage},
 	overseer::{self, SubsystemSender},
 	FromOrchestra, OverseerSignal, SpawnedSubsystem, SubsystemError,
 };
-use vine_node_subsystem_util::database::Database;
-use vine_primitives::v2::{BlockNumber, ConsensusLog, Hash, Header};
+use polkadot_node_subsystem_util::database::Database;
+use polkadot_primitives::{BlockNumber, ConsensusLog, Hash, Header};
 
 use futures::{channel::oneshot, future::Either, prelude::*};
 use parity_scale_codec::Error as CodecError;
@@ -466,6 +466,10 @@ where
 
 							let _ = tx.send(best_containing);
 						}
+						ChainSelectionMessage::RevertBlocks(blocks_to_revert) => {
+							let write_ops = handle_revert_blocks(backend, blocks_to_revert)?;
+							backend.write(write_ops)?;
+						}
 					}
 				}
 			}
@@ -567,7 +571,7 @@ async fn handle_active_leaf(
 		Some(h) => h,
 	};
 
-	let new_blocks = vine_node_subsystem_util::determine_new_blocks(
+	let new_blocks = polkadot_node_subsystem_util::determine_new_blocks(
 		sender,
 		|h| backend.load_block_entry(h).map(|b| b.is_some()),
 		hash,
@@ -676,6 +680,21 @@ fn handle_approved_block(backend: &mut impl Backend, approved_block: Hash) -> Re
 	};
 
 	backend.write(ops)
+}
+
+// Here we revert a provided group of blocks. The most common cause for this is that
+// the dispute coordinator has notified chain selection of a dispute which concluded
+// against a candidate.
+fn handle_revert_blocks(
+	backend: &impl Backend,
+	blocks_to_revert: Vec<(BlockNumber, Hash)>,
+) -> Result<Vec<BackendWriteOp>, Error> {
+	let mut overlay = OverlayedBackend::new(backend);
+	for (block_number, block_hash) in blocks_to_revert {
+		tree::apply_single_reversion(&mut overlay, block_hash, block_number)?;
+	}
+
+	Ok(overlay.into_write_ops().collect())
 }
 
 fn detect_stagnant(
