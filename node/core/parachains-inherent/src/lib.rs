@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! The parachain inherent data provider
 //!
@@ -25,11 +25,10 @@
 #![deny(unused_crate_dependencies, unused_results)]
 
 use futures::{select, FutureExt};
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	errors::SubsystemError, messages::ProvisionerMessage, overseer::Handle,
 };
-use vine_primitives::v2::{Block, Hash, InherentData as ParachainsInherentData};
-use sp_runtime::generic::BlockId;
+use polkadot_primitives::{Block, Hash, InherentData as ParachainsInherentData};
 use std::{sync::Arc, time};
 
 pub(crate) const LOG_TARGET: &str = "parachain::parachains-inherent";
@@ -40,13 +39,13 @@ const PROVISIONER_TIMEOUT: time::Duration = core::time::Duration::from_millis(25
 /// Provides the parachains inherent data.
 pub struct ParachainsInherentDataProvider<C: sp_blockchain::HeaderBackend<Block>> {
 	pub client: Arc<C>,
-	pub overseer: vine_overseer::Handle,
+	pub overseer: polkadot_overseer::Handle,
 	pub parent: Hash,
 }
 
 impl<C: sp_blockchain::HeaderBackend<Block>> ParachainsInherentDataProvider<C> {
 	/// Create a new [`Self`].
-	pub fn new(client: Arc<C>, overseer: vine_overseer::Handle, parent: Hash) -> Self {
+	pub fn new(client: Arc<C>, overseer: polkadot_overseer::Handle, parent: Hash) -> Self {
 		ParachainsInherentDataProvider { client, overseer, parent }
 	}
 
@@ -87,7 +86,7 @@ impl<C: sp_blockchain::HeaderBackend<Block>> ParachainsInherentDataProvider<C> {
 
 		let mut timeout = futures_timer::Delay::new(PROVISIONER_TIMEOUT).fuse();
 
-		let parent_header = match client.header(BlockId::Hash(parent)) {
+		let parent_header = match client.header(parent) {
 			Ok(Some(h)) => h,
 			Ok(None) => return Err(Error::ParentHeaderNotFound(parent)),
 			Err(err) => return Err(Error::Blockchain(err)),
@@ -141,7 +140,7 @@ impl<C: sp_blockchain::HeaderBackend<Block>> sp_inherents::InherentDataProvider
 		.map_err(|e| sp_inherents::Error::Application(Box::new(e)))?;
 
 		dst_inherent_data
-			.put_data(vine_primitives::v2::PARACHAINS_INHERENT_IDENTIFIER, &inherent_data)
+			.put_data(polkadot_primitives::PARACHAINS_INHERENT_IDENTIFIER, &inherent_data)
 	}
 
 	async fn try_handle_error(

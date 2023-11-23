@@ -1,22 +1,22 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-//! # vine Staking Miner.
+//! # Polkadot Staking Miner.
 //!
-//! Simple bot capable of monitoring a vine (and cousins) chain and submitting solutions to the
+//! Simple bot capable of monitoring a polkadot (and cousins) chain and submitting solutions to the
 //! `pallet-election-provider-multi-phase`. See `--help` for more details.
 //!
 //! # Implementation Notes:
@@ -50,7 +50,7 @@ use frame_election_provider_support::NposSolver;
 use frame_support::traits::Get;
 use futures_util::StreamExt;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use remote_externalities::{Builder, Mode, OnlineConfig};
+use remote_externalities::{Builder, Mode, OnlineConfig, Transport};
 use rpc::{RpcApiClient, SharedRpcClient};
 use runtime_versions::RuntimeVersions;
 use signal_hook::consts::signal::*;
@@ -61,11 +61,12 @@ use std::{ops::Deref, sync::Arc, time::Duration};
 use tracing_subscriber::{fmt, EnvFilter};
 
 pub(crate) enum AnyRuntime {
-	vine,
-
+	Polkadot,
+	Kusama,
+	Westend,
 }
 
-pub(crate) static mut RUNTIME: AnyRuntime = AnyRuntime::vine;
+pub(crate) static mut RUNTIME: AnyRuntime = AnyRuntime::Polkadot;
 
 macro_rules! construct_runtime_prelude {
 	($runtime:ident) => { paste::paste! {
@@ -119,12 +120,12 @@ macro_rules! construct_runtime_prelude {
 }
 
 // NOTE: we might be able to use some code from the bridges repo here.
-fn signed_ext_builder_peer(
+fn signed_ext_builder_polkadot(
 	nonce: Index,
 	tip: Balance,
 	era: sp_runtime::generic::Era,
-) -> vine_runtime_exports::SignedExtra {
-	use vine_runtime_exports::Runtime;
+) -> polkadot_runtime_exports::SignedExtra {
+	use polkadot_runtime_exports::Runtime;
 	(
 		frame_system::CheckNonZeroSender::<Runtime>::new(),
 		frame_system::CheckSpecVersion::<Runtime>::new(),
@@ -138,29 +139,12 @@ fn signed_ext_builder_peer(
 	)
 }
 
-fn signed_ext_builder_(
+fn signed_ext_builder_kusama(
 	nonce: Index,
 	tip: Balance,
 	era: sp_runtime::generic::Era,
-) 
-	(
-		frame_system::CheckNonZeroSender::<Runtime>::new(),
-		frame_system::CheckSpecVersion::<Runtime>::new(),
-		frame_system::CheckTxVersion::<Runtime>::new(),
-		frame_system::CheckGenesis::<Runtime>::new(),
-		frame_system::CheckMortality::<Runtime>::from(era),
-		frame_system::CheckNonce::<Runtime>::from(nonce),
-		frame_system::CheckWeight::<Runtime>::new(),
-		pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
-	)
-
-
-fn signed_ext_builder_(
-	nonce: Index,
-	tip: Balance,
-	era: sp_runtime::generic::Era,
-) -> _runtime_exports::SignedExtra {
-	use _runtime_exports::Runtime;
+) -> kusama_runtime_exports::SignedExtra {
+	use kusama_runtime_exports::Runtime;
 	(
 		frame_system::CheckNonZeroSender::<Runtime>::new(),
 		frame_system::CheckSpecVersion::<Runtime>::new(),
@@ -173,9 +157,27 @@ fn signed_ext_builder_(
 	)
 }
 
-construct_runtime_prelude!(vine);
-construct_runtime_prelude!();
-construct_runtime_prelude!();
+fn signed_ext_builder_westend(
+	nonce: Index,
+	tip: Balance,
+	era: sp_runtime::generic::Era,
+) -> westend_runtime_exports::SignedExtra {
+	use westend_runtime_exports::Runtime;
+	(
+		frame_system::CheckNonZeroSender::<Runtime>::new(),
+		frame_system::CheckSpecVersion::<Runtime>::new(),
+		frame_system::CheckTxVersion::<Runtime>::new(),
+		frame_system::CheckGenesis::<Runtime>::new(),
+		frame_system::CheckMortality::<Runtime>::from(era),
+		frame_system::CheckNonce::<Runtime>::from(nonce),
+		frame_system::CheckWeight::<Runtime>::new(),
+		pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
+	)
+}
+
+construct_runtime_prelude!(polkadot);
+construct_runtime_prelude!(kusama);
+construct_runtime_prelude!(westend);
 
 // NOTE: this is no longer used extensively, most of the per-runtime stuff us delegated to
 // `construct_runtime_prelude` and macro's the import directly from it. A part of the code is also
@@ -188,19 +190,19 @@ macro_rules! any_runtime {
 	($($code:tt)*) => {
 		unsafe {
 			match $crate::RUNTIME {
-				$crate::AnyRuntime::vine => {
+				$crate::AnyRuntime::Polkadot => {
 					#[allow(unused)]
-					use $crate::vine_runtime_exports::*;
+					use $crate::polkadot_runtime_exports::*;
 					$($code)*
 				},
-				$crate::AnyRuntime:: => {
+				$crate::AnyRuntime::Kusama => {
 					#[allow(unused)]
-					use $crate::_runtime_exports::*;
+					use $crate::kusama_runtime_exports::*;
 					$($code)*
 				},
-				$crate::AnyRuntime:: => {
+				$crate::AnyRuntime::Westend => {
 					#[allow(unused)]
-					use $crate::_runtime_exports::*;
+					use $crate::westend_runtime_exports::*;
 					$($code)*
 				}
 			}
@@ -215,19 +217,19 @@ macro_rules! any_runtime_unit {
 	($($code:tt)*) => {
 		unsafe {
 			match $crate::RUNTIME {
-				$crate::AnyRuntime::vine => {
+				$crate::AnyRuntime::Polkadot => {
 					#[allow(unused)]
-					use $crate::vine_runtime_exports::*;
+					use $crate::polkadot_runtime_exports::*;
 					let _ = $($code)*;
 				},
-				$crate::AnyRuntime:: => {
+				$crate::AnyRuntime::Kusama => {
 					#[allow(unused)]
-					use $crate::_runtime_exports::*;
+					use $crate::kusama_runtime_exports::*;
 					let _ = $($code)*;
 				},
-				$crate::AnyRuntime:: => {
+				$crate::AnyRuntime::Westend => {
 					#[allow(unused)]
-					use $crate::_runtime_exports::*;
+					use $crate::westend_runtime_exports::*;
 					let _ = $($code)*;
 				}
 			}
@@ -312,7 +314,7 @@ where
 	pallets.extend(additional);
 	Builder::<B>::new()
 		.mode(Mode::Online(OnlineConfig {
-			transport: client.into_inner().into(),
+			transport: Transport::Uri(client.uri().to_owned()),
 			at,
 			pallets,
 			hashed_prefixes: vec![<frame_system::BlockHash<T>>::prefix_hash()],
@@ -540,20 +542,42 @@ async fn main() {
 
 	let chain: String = rpc.system_chain().await.expect("system_chain infallible; qed.");
 	match chain.to_lowercase().as_str() {
-		"vine" | "development" => {
+		"polkadot" | "development" => {
 			sp_core::crypto::set_default_ss58_version(
-				sp_core::crypto::Ss58AddressFormatRegistry::peerAccount.into(),
+				sp_core::crypto::Ss58AddressFormatRegistry::PolkadotAccount.into(),
 			);
-			sub_tokens::dynamic::set_name("vine");
+			sub_tokens::dynamic::set_name("DOT");
 			sub_tokens::dynamic::set_decimal_points(10_000_000_000);
 			// safety: this program will always be single threaded, thus accessing global static is
 			// safe.
 			unsafe {
-				RUNTIME = AnyRuntime::vine;
+				RUNTIME = AnyRuntime::Polkadot;
 			}
 		},
-		
-		
+		"kusama" | "kusama-dev" => {
+			sp_core::crypto::set_default_ss58_version(
+				sp_core::crypto::Ss58AddressFormatRegistry::KusamaAccount.into(),
+			);
+			sub_tokens::dynamic::set_name("KSM");
+			sub_tokens::dynamic::set_decimal_points(1_000_000_000_000);
+			// safety: this program will always be single threaded, thus accessing global static is
+			// safe.
+			unsafe {
+				RUNTIME = AnyRuntime::Kusama;
+			}
+		},
+		"westend" => {
+			sp_core::crypto::set_default_ss58_version(
+				sp_core::crypto::Ss58AddressFormatRegistry::PolkadotAccount.into(),
+			);
+			sub_tokens::dynamic::set_name("WND");
+			sub_tokens::dynamic::set_decimal_points(1_000_000_000_000);
+			// safety: this program will always be single threaded, thus accessing global static is
+			// safe.
+			unsafe {
+				RUNTIME = AnyRuntime::Westend;
+			}
+		},
 		_ => {
 			eprintln!("unexpected chain: {:?}", chain);
 			return
@@ -629,16 +653,16 @@ mod tests {
 	#[test]
 	fn any_runtime_works() {
 		unsafe {
-			RUNTIME = AnyRuntime::vine;
+			RUNTIME = AnyRuntime::Polkadot;
 		}
-		let peer_version = any_runtime! { get_version::<Runtime>() };
+		let polkadot_version = any_runtime! { get_version::<Runtime>() };
 
 		unsafe {
-			RUNTIME = AnyRuntime::;
+			RUNTIME = AnyRuntime::Kusama;
 		}
-		let _version = any_runtime! { get_version::<Runtime>() };
+		let kusama_version = any_runtime! { get_version::<Runtime>() };
 
-		assert_eq!(peer_version.spec_name, "vine".into());
-		assert_eq!(_version.spec_name, "".into());
+		assert_eq!(polkadot_version.spec_name, "polkadot".into());
+		assert_eq!(kusama_version.spec_name, "kusama".into());
 	}
 }

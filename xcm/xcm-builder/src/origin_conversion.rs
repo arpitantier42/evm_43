@@ -1,24 +1,24 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Various implementations for `ConvertOrigin`.
 
 use frame_support::traits::{EnsureOrigin, Get, GetBacking, OriginTrait};
 use frame_system::RawOrigin as SystemRawOrigin;
-use vine_parachain::primitives::IsSystem;
+use polkadot_parachain::primitives::IsSystem;
 use sp_std::marker::PhantomData;
 use xcm::latest::{BodyId, BodyPart, Junction, Junctions::*, MultiLocation, NetworkId, OriginKind};
 use xcm_executor::traits::{Convert, ConvertOrigin};
@@ -187,7 +187,7 @@ impl<RelayOrigin: Get<RuntimeOrigin>, RuntimeOrigin> ConvertOrigin<RuntimeOrigin
 }
 
 pub struct SignedAccountId32AsNative<Network, RuntimeOrigin>(PhantomData<(Network, RuntimeOrigin)>);
-impl<Network: Get<NetworkId>, RuntimeOrigin: OriginTrait> ConvertOrigin<RuntimeOrigin>
+impl<Network: Get<Option<NetworkId>>, RuntimeOrigin: OriginTrait> ConvertOrigin<RuntimeOrigin>
 	for SignedAccountId32AsNative<Network, RuntimeOrigin>
 where
 	RuntimeOrigin::AccountId: From<[u8; 32]>,
@@ -206,7 +206,7 @@ where
 			(
 				OriginKind::Native,
 				MultiLocation { parents: 0, interior: X1(Junction::AccountId32 { id, network }) },
-			) if matches!(network, NetworkId::Any) || network == Network::get() =>
+			) if matches!(network, None) || network == Network::get() =>
 				Ok(RuntimeOrigin::signed(id.into())),
 			(_, origin) => Err(origin),
 		}
@@ -216,7 +216,7 @@ where
 pub struct SignedAccountKey20AsNative<Network, RuntimeOrigin>(
 	PhantomData<(Network, RuntimeOrigin)>,
 );
-impl<Network: Get<NetworkId>, RuntimeOrigin: OriginTrait> ConvertOrigin<RuntimeOrigin>
+impl<Network: Get<Option<NetworkId>>, RuntimeOrigin: OriginTrait> ConvertOrigin<RuntimeOrigin>
 	for SignedAccountKey20AsNative<Network, RuntimeOrigin>
 where
 	RuntimeOrigin::AccountId: From<[u8; 20]>,
@@ -235,7 +235,7 @@ where
 			(
 				OriginKind::Native,
 				MultiLocation { parents: 0, interior: X1(Junction::AccountKey20 { key, network }) },
-			) if (matches!(network, NetworkId::Any) || network == Network::get()) =>
+			) if (matches!(network, None) || network == Network::get()) =>
 				Ok(RuntimeOrigin::signed(key.into())),
 			(_, origin) => Err(origin),
 		}
@@ -277,8 +277,11 @@ where
 pub struct SignedToAccountId32<RuntimeOrigin, AccountId, Network>(
 	PhantomData<(RuntimeOrigin, AccountId, Network)>,
 );
-impl<RuntimeOrigin: OriginTrait + Clone, AccountId: Into<[u8; 32]>, Network: Get<NetworkId>>
-	Convert<RuntimeOrigin, MultiLocation> for SignedToAccountId32<RuntimeOrigin, AccountId, Network>
+impl<
+		RuntimeOrigin: OriginTrait + Clone,
+		AccountId: Into<[u8; 32]>,
+		Network: Get<Option<NetworkId>>,
+	> Convert<RuntimeOrigin, MultiLocation> for SignedToAccountId32<RuntimeOrigin, AccountId, Network>
 where
 	RuntimeOrigin::PalletsOrigin: From<SystemRawOrigin<AccountId>>
 		+ TryInto<SystemRawOrigin<AccountId>, Error = RuntimeOrigin::PalletsOrigin>,
@@ -319,5 +322,22 @@ where
 			},
 			Err(other) => Err(other),
 		})
+	}
+}
+
+/// `Convert` implementation to convert from an origin which passes the check of an `EnsureOrigin`
+/// into a voice of a given pluralistic `Body`.
+pub struct OriginToPluralityVoice<RuntimeOrigin, EnsureBodyOrigin, Body>(
+	PhantomData<(RuntimeOrigin, EnsureBodyOrigin, Body)>,
+);
+impl<RuntimeOrigin: Clone, EnsureBodyOrigin: EnsureOrigin<RuntimeOrigin>, Body: Get<BodyId>>
+	Convert<RuntimeOrigin, MultiLocation>
+	for OriginToPluralityVoice<RuntimeOrigin, EnsureBodyOrigin, Body>
+{
+	fn convert(o: RuntimeOrigin) -> Result<MultiLocation, RuntimeOrigin> {
+		match EnsureBodyOrigin::try_origin(o) {
+			Ok(_) => Ok(Junction::Plurality { id: Body::get(), part: BodyPart::Voice }.into()),
+			Err(o) => Err(o),
+		}
 	}
 }

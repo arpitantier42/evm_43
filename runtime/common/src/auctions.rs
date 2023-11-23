@@ -1,18 +1,18 @@
-// Copyright 2019-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Auctioning system to determine the set of Parachains in operation. This includes logic for the
 //! auctioning mechanism and for reserving balance as part of the "payment". Unreserving the balance
@@ -30,7 +30,7 @@ use frame_support::{
 };
 pub use pallet::*;
 use parity_scale_codec::Decode;
-use primitives::v2::Id as ParaId;
+use primitives::Id as ParaId;
 use sp_runtime::traits::{CheckedSub, One, Saturating, Zero};
 use sp_std::{mem::swap, prelude::*};
 
@@ -84,7 +84,6 @@ pub mod pallet {
 	use frame_system::{ensure_root, ensure_signed, pallet_prelude::*};
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	/// The module's configuration trait.
@@ -253,6 +252,7 @@ pub mod pallet {
 		/// This can only happen when there isn't already an auction in progress and may only be
 		/// called by the root origin. Accepts the `duration` of this auction and the
 		/// `lease_period_index` of the initial lease period of the four that are to be auctioned.
+		#[pallet::call_index(0)]
 		#[pallet::weight((T::WeightInfo::new_auction(), DispatchClass::Operational))]
 		pub fn new_auction(
 			origin: OriginFor<T>,
@@ -279,6 +279,7 @@ pub mod pallet {
 		/// absolute lease period index value, not an auction-specific offset.
 		/// - `amount` is the amount to bid to be held as deposit for the parachain should the
 		/// bid win. This amount is held throughout the range.
+		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::bid())]
 		pub fn bid(
 			origin: OriginFor<T>,
@@ -296,6 +297,7 @@ pub mod pallet {
 		/// Cancel an in-progress auction.
 		///
 		/// Can only be called by Root origin.
+		#[pallet::call_index(2)]
 		#[pallet::weight(T::WeightInfo::cancel_auction())]
 		pub fn cancel_auction(origin: OriginFor<T>) -> DispatchResult {
 			ensure_root(origin)?;
@@ -433,7 +435,7 @@ impl<T: Config> Pallet<T> {
 		// Assume it's actually an auction (this should never fail because of above).
 		let (first_lease_period, _) = AuctionInfo::<T>::get().ok_or(Error::<T>::NotAuction)?;
 
-		// Get the auction status and the current sample block. For the  d, the sample
+		// Get the auction status and the current sample block. For the starting period, the sample
 		// block is zero.
 		let auction_status = Self::auction_status(frame_system::Pallet::<T>::block_number());
 		// The offset into the ending samples of the auction.
@@ -677,11 +679,11 @@ mod tests {
 		assert_noop, assert_ok, assert_storage_noop,
 		dispatch::DispatchError::BadOrigin,
 		ord_parameter_types, parameter_types,
-		traits::{EitherOfDiverse, OnFinalize, OnInitialize},
+		traits::{ConstU32, EitherOfDiverse, OnFinalize, OnInitialize},
 	};
 	use frame_system::{EnsureRoot, EnsureSignedBy};
 	use pallet_balances;
-	use primitives::v2::{BlockNumber, Header, Id as ParaId};
+	use primitives::{BlockNumber, Header, Id as ParaId};
 	use sp_core::H256;
 	use sp_runtime::traits::{BlakeTwo256, IdentityLookup};
 	use std::{cell::RefCell, collections::BTreeMap};
@@ -746,6 +748,10 @@ mod tests {
 		type MaxLocks = ();
 		type MaxReserves = MaxReserves;
 		type ReserveIdentifier = [u8; 8];
+		type HoldIdentifier = ();
+		type FreezeIdentifier = ();
+		type MaxHolds = ConstU32<1>;
+		type MaxFreezes = ConstU32<1>;
 	}
 
 	#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Debug)]
@@ -1410,24 +1416,25 @@ mod tests {
 			let para_2 = ParaId::from(2_u32);
 
 			// Make a bid and reserve a balance
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(1), para_1, 1, 1, 4, 10));
-			assert_eq!(Balances::reserved_balance(1), 10);
-			assert_eq!(ReservedAmounts::<Test>::get((1, para_1)), Some(10));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(1), para_1, 1, 1, 4, 9));
+			assert_eq!(Balances::reserved_balance(1), 9);
+			assert_eq!(ReservedAmounts::<Test>::get((1, para_1)), Some(9));
 			assert_eq!(Balances::reserved_balance(2), 0);
 			assert_eq!(ReservedAmounts::<Test>::get((2, para_2)), None);
 
 			// Bigger bid, reserves new balance and returns funds
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(2), para_2, 1, 1, 4, 20));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(2), para_2, 1, 1, 4, 19));
 			assert_eq!(Balances::reserved_balance(1), 0);
 			assert_eq!(ReservedAmounts::<Test>::get((1, para_1)), None);
-			assert_eq!(Balances::reserved_balance(2), 20);
-			assert_eq!(ReservedAmounts::<Test>::get((2, para_2)), Some(20));
+			assert_eq!(Balances::reserved_balance(2), 19);
+			assert_eq!(ReservedAmounts::<Test>::get((2, para_2)), Some(19));
 		});
 	}
 
 	#[test]
 	fn initialize_winners_in_ending_period_works() {
 		new_test_ext().execute_with(|| {
+			assert_eq!(<Test as pallet_balances::Config>::ExistentialDeposit::get(), 1);
 			run_to_block(1);
 			assert_ok!(Auctions::new_auction(RuntimeOrigin::signed(6), 9, 1));
 			let para_1 = ParaId::from(1_u32);
@@ -1435,16 +1442,16 @@ mod tests {
 			let para_3 = ParaId::from(3_u32);
 
 			// Make bids
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(1), para_1, 1, 1, 4, 10));
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(2), para_2, 1, 3, 4, 20));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(1), para_1, 1, 1, 4, 9));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(2), para_2, 1, 3, 4, 19));
 
 			assert_eq!(
 				Auctions::auction_status(System::block_number()),
 				AuctionStatus::<u32>::StartingPeriod
 			);
 			let mut winning = [None; SlotRange::SLOT_RANGE_COUNT];
-			winning[SlotRange::ZeroThree as u8 as usize] = Some((1, para_1, 10));
-			winning[SlotRange::TwoThree as u8 as usize] = Some((2, para_2, 20));
+			winning[SlotRange::ZeroThree as u8 as usize] = Some((1, para_1, 9));
+			winning[SlotRange::TwoThree as u8 as usize] = Some((2, para_2, 19));
 			assert_eq!(Auctions::winning(0), Some(winning));
 
 			run_to_block(9);
@@ -1466,14 +1473,14 @@ mod tests {
 				AuctionStatus::<u32>::EndingPeriod(1, 0)
 			);
 			assert_eq!(Auctions::winning(1), Some(winning));
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(3), para_3, 1, 3, 4, 30));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(3), para_3, 1, 3, 4, 29));
 
 			run_to_block(12);
 			assert_eq!(
 				Auctions::auction_status(System::block_number()),
 				AuctionStatus::<u32>::EndingPeriod(2, 0)
 			);
-			winning[SlotRange::TwoThree as u8 as usize] = Some((3, para_3, 30));
+			winning[SlotRange::TwoThree as u8 as usize] = Some((3, para_3, 29));
 			assert_eq!(Auctions::winning(2), Some(winning));
 		});
 	}
@@ -1540,6 +1547,7 @@ mod tests {
 	#[test]
 	fn less_winning_samples_work() {
 		new_test_ext().execute_with(|| {
+			assert_eq!(<Test as pallet_balances::Config>::ExistentialDeposit::get(), 1);
 			EndingPeriod::set(30);
 			SampleLength::set(10);
 
@@ -1550,16 +1558,16 @@ mod tests {
 			let para_3 = ParaId::from(3_u32);
 
 			// Make bids
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(1), para_1, 1, 11, 14, 10));
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(2), para_2, 1, 13, 14, 20));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(1), para_1, 1, 11, 14, 9));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(2), para_2, 1, 13, 14, 19));
 
 			assert_eq!(
 				Auctions::auction_status(System::block_number()),
 				AuctionStatus::<u32>::StartingPeriod
 			);
 			let mut winning = [None; SlotRange::SLOT_RANGE_COUNT];
-			winning[SlotRange::ZeroThree as u8 as usize] = Some((1, para_1, 10));
-			winning[SlotRange::TwoThree as u8 as usize] = Some((2, para_2, 20));
+			winning[SlotRange::ZeroThree as u8 as usize] = Some((1, para_1, 9));
+			winning[SlotRange::TwoThree as u8 as usize] = Some((2, para_2, 19));
 			assert_eq!(Auctions::winning(0), Some(winning));
 
 			run_to_block(9);
@@ -1576,8 +1584,8 @@ mod tests {
 			assert_eq!(Auctions::winning(0), Some(winning));
 
 			// New bids update the current winning
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(3), para_3, 1, 14, 14, 30));
-			winning[SlotRange::ThreeThree as u8 as usize] = Some((3, para_3, 30));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(3), para_3, 1, 14, 14, 29));
+			winning[SlotRange::ThreeThree as u8 as usize] = Some((3, para_3, 29));
 			assert_eq!(Auctions::winning(0), Some(winning));
 
 			run_to_block(20);
@@ -1588,8 +1596,8 @@ mod tests {
 			assert_eq!(Auctions::winning(1), Some(winning));
 			run_to_block(25);
 			// Overbid mid sample
-			assert_ok!(Auctions::bid(RuntimeOrigin::signed(3), para_3, 1, 13, 14, 30));
-			winning[SlotRange::TwoThree as u8 as usize] = Some((3, para_3, 30));
+			assert_ok!(Auctions::bid(RuntimeOrigin::signed(3), para_3, 1, 13, 14, 29));
+			winning[SlotRange::TwoThree as u8 as usize] = Some((3, para_3, 29));
 			assert_eq!(Auctions::winning(1), Some(winning));
 
 			run_to_block(30);
@@ -1609,8 +1617,8 @@ mod tests {
 			assert_eq!(
 				leases(),
 				vec![
-					((3.into(), 13), LeaseData { leaser: 3, amount: 30 }),
-					((3.into(), 14), LeaseData { leaser: 3, amount: 30 }),
+					((3.into(), 13), LeaseData { leaser: 3, amount: 29 }),
+					((3.into(), 14), LeaseData { leaser: 3, amount: 29 }),
 				]
 			);
 		});
@@ -1723,11 +1731,15 @@ mod tests {
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking {
 	use super::{Pallet as Auctions, *};
-	use frame_support::traits::{EnsureOrigin, OnInitialize};
+	use frame_support::{
+		assert_ok,
+		traits::{EnsureOrigin, OnInitialize},
+	};
 	use frame_system::RawOrigin;
+	use runtime_parachains::paras;
 	use sp_runtime::{traits::Bounded, SaturatedConversion};
 
-	use frame_benchmarking::{account, benchmarks, whitelisted_caller};
+	use frame_benchmarking::{account, benchmarks, whitelisted_caller, BenchmarkError};
 
 	fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 		let events = frame_system::Pallet::<T>::events();
@@ -1737,7 +1749,7 @@ mod benchmarking {
 		assert_eq!(event, &system_event);
 	}
 
-	fn fill_winners<T: Config>(lease_period_index: LeasePeriodOf<T>) {
+	fn fill_winners<T: Config + paras::Config>(lease_period_index: LeasePeriodOf<T>) {
 		let auction_index = AuctionCounter::<T>::get();
 		let minimum_balance = CurrencyOf::<T>::minimum_balance();
 
@@ -1755,6 +1767,10 @@ mod benchmarking {
 			)
 			.is_ok());
 		}
+		assert_ok!(paras::Pallet::<T>::add_trusted_validation_code(
+			frame_system::Origin::<T>::Root.into(),
+			T::Registrar::worst_validation_code(),
+		));
 
 		T::Registrar::execute_pending_transitions();
 
@@ -1778,12 +1794,13 @@ mod benchmarking {
 	}
 
 	benchmarks! {
-		where_clause { where T: pallet_babe::Config }
+		where_clause { where T: pallet_babe::Config + paras::Config }
 
 		new_auction {
 			let duration = T::BlockNumber::max_value();
 			let lease_period_index = LeasePeriodOf::<T>::max_value();
-			let origin = T::InitiateOrigin::successful_origin();
+			let origin =
+				T::InitiateOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		}: _<T::RuntimeOrigin>(origin, duration, lease_period_index)
 		verify {
 			assert_last_event::<T>(Event::<T>::AuctionStarted {
@@ -1802,7 +1819,8 @@ mod benchmarking {
 			// Create a new auction
 			let duration = T::BlockNumber::max_value();
 			let lease_period_index = LeasePeriodOf::<T>::zero();
-			let origin = T::InitiateOrigin::successful_origin();
+			let origin = T::InitiateOrigin::try_successful_origin()
+				.expect("InitiateOrigin has no successful origin required for the benchmark");
 			Auctions::<T>::new_auction(origin, duration, lease_period_index)?;
 
 			let para = ParaId::from(0);
@@ -1814,7 +1832,12 @@ mod benchmarking {
 			let worst_head_data = T::Registrar::worst_head_data();
 			let worst_validation_code = T::Registrar::worst_validation_code();
 			T::Registrar::register(owner.clone(), para, worst_head_data.clone(), worst_validation_code.clone())?;
-			T::Registrar::register(owner, new_para, worst_head_data, worst_validation_code)?;
+			T::Registrar::register(owner, new_para, worst_head_data, worst_validation_code.clone())?;
+			assert_ok!(paras::Pallet::<T>::add_trusted_validation_code(
+				frame_system::Origin::<T>::Root.into(),
+				worst_validation_code,
+			));
+
 			T::Registrar::execute_pending_transitions();
 
 			// Make an existing bid
@@ -1854,7 +1877,8 @@ mod benchmarking {
 			let duration: T::BlockNumber = lease_length / 2u32.into();
 			let lease_period_index = LeasePeriodOf::<T>::zero();
 			let now = frame_system::Pallet::<T>::block_number();
-			let origin = T::InitiateOrigin::successful_origin();
+			let origin = T::InitiateOrigin::try_successful_origin()
+				.expect("InitiateOrigin has no successful origin required for the benchmark");
 			Auctions::<T>::new_auction(origin, duration, lease_period_index)?;
 
 			fill_winners::<T>(lease_period_index);
@@ -1877,7 +1901,7 @@ mod benchmarking {
 				pallet_babe::Pallet::<T>::on_initialize(duration + now + T::EndingPeriod::get());
 				let authorities = pallet_babe::Pallet::<T>::authorities();
 				let next_authorities = authorities.clone();
-				pallet_babe::Pallet::<T>::enact_epoch_change(authorities, next_authorities);
+				pallet_babe::Pallet::<T>::enact_epoch_change(authorities, next_authorities, None);
 			}
 
 		}: {
@@ -1898,7 +1922,8 @@ mod benchmarking {
 			let duration: T::BlockNumber = lease_length / 2u32.into();
 			let lease_period_index = LeasePeriodOf::<T>::zero();
 			let now = frame_system::Pallet::<T>::block_number();
-			let origin = T::InitiateOrigin::successful_origin();
+			let origin = T::InitiateOrigin::try_successful_origin()
+				.expect("InitiateOrigin has no successful origin required for the benchmark");
 			Auctions::<T>::new_auction(origin, duration, lease_period_index)?;
 
 			fill_winners::<T>(lease_period_index);

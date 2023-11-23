@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 //! Subsystem unit tests
@@ -26,37 +26,37 @@ use std::{
 
 use assert_matches::assert_matches;
 use futures::{
-	channel::{mpsc, oneshot},
+	channel::oneshot,
 	future::{poll_fn, ready},
-	pin_mut, Future, SinkExt,
+	pin_mut, Future,
 };
 use futures_timer::Delay;
 use parity_scale_codec::{Decode, Encode};
 
 use sc_network::config::RequestResponseConfig;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	request_response::{v1::DisputeRequest, IncomingRequest, ReqProtocolNames},
 	PeerId,
 };
 use sp_keyring::Sr25519Keyring;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	request_response::{v1::DisputeResponse, Recipient, Requests},
 	IfDisconnected,
 };
-use vine_node_primitives::{CandidateVotes, DisputeStatus, UncheckedDisputeMessage};
-use vine_node_subsystem::{
+use polkadot_node_primitives::DisputeStatus;
+use polkadot_node_subsystem::{
 	messages::{
 		AllMessages, DisputeCoordinatorMessage, DisputeDistributionMessage, ImportStatementsResult,
 		NetworkBridgeTxMessage, RuntimeApiMessage, RuntimeApiRequest,
 	},
 	ActivatedLeaf, ActiveLeavesUpdate, FromOrchestra, LeafStatus, OverseerSignal, Span,
 };
-use vine_node_subsystem_test_helpers::{
+use polkadot_node_subsystem_test_helpers::{
 	mock::make_ferdie_keystore, subsystem_test_harness, TestSubsystemContextHandle,
 };
-use vine_primitives::v2::{
+use polkadot_primitives::{
 	AuthorityDiscoveryId, CandidateHash, CandidateReceipt, Hash, SessionIndex, SessionInfo,
 };
 
@@ -81,7 +81,7 @@ fn send_dispute_sends_dispute() {
 
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
-		send_dispute(&mut handle, candidate, true).await;
+		send_dispute(&mut handle, candidate).await;
 		conclude(&mut handle).await;
 	};
 	test_harness(test);
@@ -96,7 +96,7 @@ fn send_honors_rate_limit() {
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
 		let before_request = Instant::now();
-		send_dispute(&mut handle, candidate, true).await;
+		send_dispute(&mut handle, candidate).await;
 		// First send should not be rate limited:
 		gum::trace!("Passed time: {:#?}", Instant::now().saturating_duration_since(before_request));
 		// This test would likely be flaky on CI:
@@ -104,7 +104,7 @@ fn send_honors_rate_limit() {
 
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
-		send_dispute(&mut handle, candidate, false).await;
+		send_dispute(&mut handle, candidate).await;
 		// Second send should be rate limited:
 		gum::trace!(
 			"Passed time for send_dispute: {:#?}",
@@ -120,10 +120,9 @@ fn send_honors_rate_limit() {
 async fn send_dispute(
 	handle: &mut TestSubsystemContextHandle<DisputeDistributionMessage>,
 	candidate: CandidateReceipt,
-	needs_session_info: bool,
 ) {
 	let before_request = Instant::now();
-	let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX).await;
+	let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX);
 	gum::trace!(
 		"Passed time for making message: {:#?}",
 		Instant::now().saturating_duration_since(before_request)
@@ -138,25 +137,6 @@ async fn send_dispute(
 		"Passed time for sending message: {:#?}",
 		Instant::now().saturating_duration_since(before_request)
 	);
-	if needs_session_info {
-		// Requests needed session info:
-		assert_matches!(
-		handle.recv().await,
-		AllMessages::RuntimeApi(
-			RuntimeApiMessage::Request(
-				hash,
-				RuntimeApiRequest::SessionInfo(session_index, tx)
-				)
-			) => {
-			assert_eq!(session_index, MOCK_SESSION_INDEX);
-			assert_eq!(
-				hash,
-				message.candidate_receipt().descriptor.relay_parent
-				);
-			tx.send(Ok(Some(MOCK_SESSION_INFO.clone()))).expect("Receiver should stay alive.");
-		}
-		);
-	}
 
 	let expected_receivers = {
 		let info = &MOCK_SESSION_INFO;
@@ -190,7 +170,7 @@ fn received_non_authorities_are_dropped() {
 
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
-		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX).await;
+		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX);
 
 		// Non validator request should get dropped:
 		let rx_response =
@@ -222,7 +202,7 @@ fn received_request_triggers_import() {
 
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
-		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX).await;
+		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX);
 
 		nested_network_dispute_request(
 			&mut handle,
@@ -250,7 +230,7 @@ fn batching_works() {
 
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
-		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX).await;
+		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX);
 
 		// Initial request should get forwarded immediately:
 		nested_network_dispute_request(
@@ -266,30 +246,30 @@ fn batching_works() {
 
 		let mut rx_responses = Vec::new();
 
-		let message = make_dispute_message(candidate.clone(), BOB_INDEX, FERDIE_INDEX).await;
-		let vine = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Bob);
-		rx_responses.push(send_network_dispute_request(req_tx, vine, message.clone().into()).await);
+		let message = make_dispute_message(candidate.clone(), BOB_INDEX, FERDIE_INDEX);
+		let peer = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Bob);
+		rx_responses.push(send_network_dispute_request(req_tx, peer, message.clone().into()).await);
 
-		let message = make_dispute_message(candidate.clone(), CHARLIE_INDEX, FERDIE_INDEX).await;
-		let vine = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Charlie);
-		rx_responses.push(send_network_dispute_request(req_tx, vine, message.clone().into()).await);
+		let message = make_dispute_message(candidate.clone(), CHARLIE_INDEX, FERDIE_INDEX);
+		let peer = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Charlie);
+		rx_responses.push(send_network_dispute_request(req_tx, peer, message.clone().into()).await);
 		gum::trace!("Imported 3 votes into batch");
 
-		Delay::new(BATCH_COLLECTING_INTERVAL).await;
+		Delay::new(BATCH_COLLECTING_INTERVAL);
 		gum::trace!("Batch should still be alive");
 		// Batch should still be alive (2 new votes):
 		// Let's import two more votes, but fully duplicates - should not extend batch live.
 		gum::trace!("Importing duplicate votes");
 		let mut rx_responses_duplicate = Vec::new();
-		let message = make_dispute_message(candidate.clone(), BOB_INDEX, FERDIE_INDEX).await;
-		let vine = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Bob);
+		let message = make_dispute_message(candidate.clone(), BOB_INDEX, FERDIE_INDEX);
+		let peer = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Bob);
 		rx_responses_duplicate
-			.push(send_network_dispute_request(req_tx, vine, message.clone().into()).await);
+			.push(send_network_dispute_request(req_tx, peer, message.clone().into()).await);
 
-		let message = make_dispute_message(candidate.clone(), CHARLIE_INDEX, FERDIE_INDEX).await;
-		let vine = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Charlie);
+		let message = make_dispute_message(candidate.clone(), CHARLIE_INDEX, FERDIE_INDEX);
+		let peer = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Charlie);
 		rx_responses_duplicate
-			.push(send_network_dispute_request(req_tx, vine, message.clone().into()).await);
+			.push(send_network_dispute_request(req_tx, peer, message.clone().into()).await);
 
 		for rx_response in rx_responses_duplicate {
 			assert_matches!(
@@ -375,7 +355,7 @@ fn receive_rate_limit_is_enforced() {
 
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
-		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX).await;
+		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX);
 
 		// Initial request should get forwarded immediately:
 		nested_network_dispute_request(
@@ -391,19 +371,19 @@ fn receive_rate_limit_is_enforced() {
 
 		let mut rx_responses = Vec::new();
 
-		let vine = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Bob);
+		let peer = MOCK_AUTHORITY_DISCOVERY.get_peer_id_by_authority(Sr25519Keyring::Bob);
 
-		let message = make_dispute_message(candidate.clone(), BOB_INDEX, FERDIE_INDEX).await;
-		rx_responses.push(send_network_dispute_request(req_tx, vine, message.clone().into()).await);
+		let message = make_dispute_message(candidate.clone(), BOB_INDEX, FERDIE_INDEX);
+		rx_responses.push(send_network_dispute_request(req_tx, peer, message.clone().into()).await);
 
-		let message = make_dispute_message(candidate.clone(), CHARLIE_INDEX, FERDIE_INDEX).await;
-		rx_responses.push(send_network_dispute_request(req_tx, vine, message.clone().into()).await);
+		let message = make_dispute_message(candidate.clone(), CHARLIE_INDEX, FERDIE_INDEX);
+		rx_responses.push(send_network_dispute_request(req_tx, peer, message.clone().into()).await);
 
 		gum::trace!("Import one too much:");
 
-		let message = make_dispute_message(candidate.clone(), CHARLIE_INDEX, ALICE_INDEX).await;
+		let message = make_dispute_message(candidate.clone(), CHARLIE_INDEX, ALICE_INDEX);
 		let rx_response_flood =
-			send_network_dispute_request(req_tx, vine, message.clone().into()).await;
+			send_network_dispute_request(req_tx, peer, message.clone().into()).await;
 
 		assert_matches!(
 			rx_response_flood.await,
@@ -480,94 +460,18 @@ fn receive_rate_limit_is_enforced() {
 }
 
 #[test]
-fn disputes_are_recovered_at_startup() {
-	let test = |mut handle: TestSubsystemContextHandle<DisputeDistributionMessage>, _| async move {
-		let relay_parent = Hash::random();
-		let candidate = make_candidate_receipt(relay_parent);
-
-		let _ = handle_subsystem_startup(&mut handle, Some(candidate.hash())).await;
-
-		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX).await;
-		// Requests needed session info:
-		assert_matches!(
-			handle.recv().await,
-			AllMessages::DisputeCoordinator(
-				DisputeCoordinatorMessage::QueryCandidateVotes(
-					query,
-					tx,
-				)
-			) => {
-				let (session_index, candidate_hash) = query.get(0).unwrap().clone();
-				assert_eq!(session_index, MOCK_SESSION_INDEX);
-				assert_eq!(candidate_hash, candidate.hash());
-				let unchecked: UncheckedDisputeMessage = message.into();
-				tx.send(vec![(session_index, candidate_hash, CandidateVotes {
-					candidate_receipt: candidate,
-					valid: [(
-						unchecked.valid_vote.validator_index,
-						(unchecked.valid_vote.kind,
-						unchecked.valid_vote.signature
-						),
-					)].into_iter().collect(),
-					invalid: [(
-						unchecked.invalid_vote.validator_index,
-						(
-						unchecked.invalid_vote.kind,
-						unchecked.invalid_vote.signature
-						),
-					)].into_iter().collect(),
-				})])
-				.expect("Receiver should stay alive.");
-			}
-		);
-
-		let expected_receivers = {
-			let info = &MOCK_SESSION_INFO;
-			info.discovery_keys
-				.clone()
-				.into_iter()
-				.filter(|a| a != &Sr25519Keyring::Ferdie.public().into())
-				.collect()
-			// All validators are also authorities in the first session, so we are
-			// done here.
-		};
-		check_sent_requests(&mut handle, expected_receivers, true).await;
-
-		conclude(&mut handle).await;
-	};
-	test_harness(test);
-}
-
-#[test]
 fn send_dispute_gets_cleaned_up() {
 	let test = |mut handle: TestSubsystemContextHandle<DisputeDistributionMessage>, _| async move {
 		let old_head = handle_subsystem_startup(&mut handle, None).await;
 
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
-		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX).await;
+		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX);
 		handle
 			.send(FromOrchestra::Communication {
 				msg: DisputeDistributionMessage::SendDispute(message.clone()),
 			})
 			.await;
-		// Requests needed session info:
-		assert_matches!(
-			handle.recv().await,
-			AllMessages::RuntimeApi(
-				RuntimeApiMessage::Request(
-					hash,
-					RuntimeApiRequest::SessionInfo(session_index, tx)
-				)
-			) => {
-				assert_eq!(session_index, MOCK_SESSION_INDEX);
-				assert_eq!(
-					hash,
-					message.candidate_receipt().descriptor.relay_parent
-				);
-				tx.send(Ok(Some(MOCK_SESSION_INFO.clone()))).expect("Receiver should stay alive.");
-			}
-		);
 
 		let expected_receivers = {
 			let info = &MOCK_SESSION_INFO;
@@ -605,34 +509,18 @@ fn send_dispute_gets_cleaned_up() {
 
 #[test]
 fn dispute_retries_and_works_across_session_boundaries() {
+	sp_tracing::try_init_simple();
 	let test = |mut handle: TestSubsystemContextHandle<DisputeDistributionMessage>, _| async move {
 		let old_head = handle_subsystem_startup(&mut handle, None).await;
 
 		let relay_parent = Hash::random();
 		let candidate = make_candidate_receipt(relay_parent);
-		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX).await;
+		let message = make_dispute_message(candidate.clone(), ALICE_INDEX, FERDIE_INDEX);
 		handle
 			.send(FromOrchestra::Communication {
 				msg: DisputeDistributionMessage::SendDispute(message.clone()),
 			})
 			.await;
-		// Requests needed session info:
-		assert_matches!(
-			handle.recv().await,
-			AllMessages::RuntimeApi(
-				RuntimeApiMessage::Request(
-					hash,
-					RuntimeApiRequest::SessionInfo(session_index, tx)
-				)
-			) => {
-				assert_eq!(session_index, MOCK_SESSION_INDEX);
-				assert_eq!(
-					hash,
-					message.candidate_receipt().descriptor.relay_parent
-				);
-				tx.send(Ok(Some(MOCK_SESSION_INFO.clone()))).expect("Receiver should stay alive.");
-			}
-		);
 
 		let expected_receivers: HashSet<_> = {
 			let info = &MOCK_SESSION_INFO;
@@ -702,14 +590,14 @@ fn dispute_retries_and_works_across_session_boundaries() {
 }
 
 async fn send_network_dispute_request(
-	req_tx: &mut mpsc::Sender<sc_network::config::IncomingRequest>,
-	vine: PeerId,
+	req_tx: &mut async_channel::Sender<sc_network::config::IncomingRequest>,
+	peer: PeerId,
 	message: DisputeRequest,
 ) -> oneshot::Receiver<sc_network::config::OutgoingResponse> {
 	let (pending_response, rx_response) = oneshot::channel();
 	let req =
-		sc_network::config::IncomingRequest { vine, payload: message.encode(), pending_response };
-	req_tx.feed(req).await.unwrap();
+		sc_network::config::IncomingRequest { peer, payload: message.encode(), pending_response };
+	req_tx.send(req).await.unwrap();
 	rx_response
 }
 
@@ -718,8 +606,8 @@ async fn send_network_dispute_request(
 /// Passed in function will be called while votes are still being imported.
 async fn nested_network_dispute_request<'a, F, O>(
 	handle: &'a mut TestSubsystemContextHandle<DisputeDistributionMessage>,
-	req_tx: &'a mut mpsc::Sender<sc_network::config::IncomingRequest>,
-	vine: PeerId,
+	req_tx: &'a mut async_channel::Sender<sc_network::config::IncomingRequest>,
+	peer: PeerId,
 	message: DisputeRequest,
 	import_result: ImportStatementsResult,
 	need_session_info: bool,
@@ -727,13 +615,13 @@ async fn nested_network_dispute_request<'a, F, O>(
 ) where
 	F: FnOnce(
 			&'a mut TestSubsystemContextHandle<DisputeDistributionMessage>,
-			&'a mut mpsc::Sender<sc_network::config::IncomingRequest>,
+			&'a mut async_channel::Sender<sc_network::config::IncomingRequest>,
 			DisputeRequest,
 		) -> O
 		+ 'a,
 	O: Future<Output = ()> + 'a,
 {
-	let rx_response = send_network_dispute_request(req_tx, vine, message.clone().into()).await;
+	let rx_response = send_network_dispute_request(req_tx, peer, message.clone().into()).await;
 
 	if need_session_info {
 		// Subsystem might need `SessionInfo` for determining indices:
@@ -834,7 +722,6 @@ async fn activate_leaf(
 	// Currently active disputes to send to the subsystem.
 	active_disputes: Vec<(SessionIndex, CandidateHash, DisputeStatus)>,
 ) {
-	let has_active_disputes = !active_disputes.is_empty();
 	handle
 		.send(FromOrchestra::Signal(OverseerSignal::ActiveLeaves(ActiveLeavesUpdate {
 			activated: Some(ActivatedLeaf {
@@ -856,27 +743,24 @@ async fn activate_leaf(
 			tx.send(Ok(session_index)).expect("Receiver should stay alive.");
 		}
 	);
+
+	if let Some(session_info) = new_session {
+		assert_matches!(
+		handle.recv().await,
+		AllMessages::RuntimeApi(RuntimeApiMessage::Request(
+			h,
+			RuntimeApiRequest::SessionInfo(session_idx, tx)
+		)) => {
+			assert_eq!(h, activate);
+			assert_eq!(session_index, session_idx);
+			tx.send(Ok(Some(session_info))).expect("Receiver should stay alive.");
+		});
+	}
+
 	assert_matches!(
 		handle.recv().await,
 		AllMessages::DisputeCoordinator(DisputeCoordinatorMessage::ActiveDisputes(tx)) => {
 			tx.send(active_disputes).expect("Receiver should stay alive.");
-		}
-	);
-
-	let new_session = match (new_session, has_active_disputes) {
-		(Some(new_session), true) => new_session,
-		_ => return,
-	};
-
-	assert_matches!(
-		handle.recv().await,
-		AllMessages::RuntimeApi(RuntimeApiMessage::Request(
-				h,
-				RuntimeApiRequest::SessionInfo(i, tx)
-		)) => {
-			assert_eq!(h, activate);
-			assert_eq!(i, session_index);
-			tx.send(Ok(Some(new_session))).expect("Receiver should stay alive.");
 		}
 	);
 }
@@ -904,7 +788,7 @@ async fn check_sent_requests(
 			)
 			.collect();
 
-			let receivers_raw: Vec<_> = reqs.iter().map(|r| r.vine.clone()).collect();
+			let receivers_raw: Vec<_> = reqs.iter().map(|r| r.peer.clone()).collect();
 			let receivers: HashSet<_> = receivers_raw.clone().clone().into_iter().collect();
 			assert_eq!(receivers_raw.len(), receivers.len(), "No duplicates are expected.");
 			assert_eq!(receivers.len(), expected_receivers.len());

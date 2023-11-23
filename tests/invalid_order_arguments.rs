@@ -1,4 +1,4 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
+// Copyright (C) Parity Technologies (UK) Ltd.
 // This file is part of Substrate.
 
 // Substrate is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@ use tempfile::tempdir;
 fn invalid_order_arguments() {
 	let tmpdir = tempdir().expect("could not create temp dir");
 
-	let status = Command::new(cargo_bin("vine"))
+	let status = Command::new(cargo_bin("polkadot"))
 		.args(["--dev", "invalid_order_arguments", "-d"])
 		.arg(tmpdir.path())
 		.arg("-y")

@@ -1,20 +1,20 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use vine_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_node_subsystem_util::metrics::{self, prometheus};
 
 #[derive(Clone)]
 pub(crate) struct MetricsInner {
@@ -67,35 +67,35 @@ impl metrics::Metrics for Metrics {
 		let metrics = MetricsInner {
 			signed_statements_total: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_candidate_backing_signed_statements_total",
+					"polkadot_parachain_candidate_backing_signed_statements_total",
 					"Number of statements signed.",
 				)?,
 				registry,
 			)?,
 			candidates_seconded_total: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_candidate_backing_candidates_seconded_total",
+					"polkadot_parachain_candidate_backing_candidates_seconded_total",
 					"Number of candidates seconded.",
 				)?,
 				registry,
 			)?,
 			process_second: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_candidate_backing_process_second",
+					"polkadot_parachain_candidate_backing_process_second",
 					"Time spent within `candidate_backing::process_second`",
 				))?,
 				registry,
 			)?,
 			process_statement: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_candidate_backing_process_statement",
+					"polkadot_parachain_candidate_backing_process_statement",
 					"Time spent within `candidate_backing::process_statement`",
 				))?,
 				registry,
 			)?,
 			get_backed_candidates: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_candidate_backing_get_backed_candidates",
+					"polkadot_parachain_candidate_backing_get_backed_candidates",
 					"Time spent within `candidate_backing::get_backed_candidates`",
 				))?,
 				registry,

@@ -1,22 +1,22 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Code related to benchmarking a [`crate::Client`].
 
-use vine_primitives::v2::{AccountId, Balance};
+use polkadot_primitives::{AccountId, Balance};
 use sp_core::{Pair, H256};
 use sp_keyring::Sr25519Keyring;
 use sp_runtime::OpaqueExtrinsic;
@@ -54,7 +54,7 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for RemarkBuilder {
 				let call = RuntimeCall::System(SystemCall::remark { remark: vec![] });
 				let signer = Sr25519Keyring::Bob.pair();
 
-				let period = vine_runtime_common::BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
+				let period = polkadot_runtime_common::BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
 				let genesis = client.usage_info().chain.best_hash;
 
 				Ok(client.sign_call(call, nonce, 0, period, genesis, signer))
@@ -100,7 +100,7 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for TransferKeepAliveBuilder {
 				});
 				let signer = Sr25519Keyring::Bob.pair();
 
-				let period = vine_runtime_common::BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
+				let period = polkadot_runtime_common::BlockHashCount::get().checked_next_power_of_two().map(|c| c / 2).unwrap_or(2) as u64;
 				let genesis = client.usage_info().chain.best_hash;
 
 				Ok(client.sign_call(call, nonce, 0, period, genesis, signer))
@@ -129,20 +129,20 @@ trait BenchmarkCallSigner<RuntimeCall: Encode + Clone, Signer: Pair> {
 	) -> OpaqueExtrinsic;
 }
 
-#[cfg(feature = "vine")]
-impl BenchmarkCallSigner<vine_runtime::RuntimeCall, sp_core::sr25519::Pair>
-	for FullClient<vine_runtime::RuntimeApi, VineExecutorDispatch>
+#[cfg(feature = "polkadot")]
+impl BenchmarkCallSigner<polkadot_runtime::RuntimeCall, sp_core::sr25519::Pair>
+	for FullClient<polkadot_runtime::RuntimeApi, PolkadotExecutorDispatch>
 {
 	fn sign_call(
 		&self,
-		call: vine_runtime::RuntimeCall,
+		call: polkadot_runtime::RuntimeCall,
 		nonce: u32,
 		current_block: u64,
 		period: u64,
 		genesis: H256,
 		acc: sp_core::sr25519::Pair,
 	) -> OpaqueExtrinsic {
-		use vine_runtime as runtime;
+		use polkadot_runtime as runtime;
 
 		let extra: runtime::SignedExtra = (
 			frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
@@ -155,7 +155,7 @@ impl BenchmarkCallSigner<vine_runtime::RuntimeCall, sp_core::sr25519::Pair>
 			frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
 			frame_system::CheckWeight::<runtime::Runtime>::new(),
 			pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
-			vine_runtime_common::claims::PrevalidateAttests::<runtime::Runtime>::new(),
+			polkadot_runtime_common::claims::PrevalidateAttests::<runtime::Runtime>::new(),
 		);
 
 		let payload = runtime::SignedPayload::from_raw(
@@ -178,27 +178,27 @@ impl BenchmarkCallSigner<vine_runtime::RuntimeCall, sp_core::sr25519::Pair>
 		runtime::UncheckedExtrinsic::new_signed(
 			call,
 			sp_runtime::AccountId32::from(acc.public()).into(),
-			vine_core_primitives::Signature::Sr25519(signature.clone()),
+			polkadot_core_primitives::Signature::Sr25519(signature.clone()),
 			extra,
 		)
 		.into()
 	}
 }
 
-#[cfg(feature = " ")]
-impl BenchmarkCallSigner< _runtime::RuntimeCall, sp_core::sr25519::Pair>
-	for FullClient< _runtime::RuntimeApi,  ExecutorDispatch>
+#[cfg(feature = "westend")]
+impl BenchmarkCallSigner<westend_runtime::RuntimeCall, sp_core::sr25519::Pair>
+	for FullClient<westend_runtime::RuntimeApi, WestendExecutorDispatch>
 {
 	fn sign_call(
 		&self,
-		call:  _runtime::RuntimeCall,
+		call: westend_runtime::RuntimeCall,
 		nonce: u32,
 		current_block: u64,
 		period: u64,
 		genesis: H256,
 		acc: sp_core::sr25519::Pair,
 	) -> OpaqueExtrinsic {
-		use  _runtime as runtime;
+		use westend_runtime as runtime;
 
 		let extra: runtime::SignedExtra = (
 			frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
@@ -232,20 +232,126 @@ impl BenchmarkCallSigner< _runtime::RuntimeCall, sp_core::sr25519::Pair>
 		runtime::UncheckedExtrinsic::new_signed(
 			call,
 			sp_runtime::AccountId32::from(acc.public()).into(),
-			vine_core_primitives::Signature::Sr25519(signature.clone()),
+			polkadot_core_primitives::Signature::Sr25519(signature.clone()),
 			extra,
 		)
 		.into()
 	}
 }
 
+#[cfg(feature = "kusama")]
+impl BenchmarkCallSigner<kusama_runtime::RuntimeCall, sp_core::sr25519::Pair>
+	for FullClient<kusama_runtime::RuntimeApi, KusamaExecutorDispatch>
+{
+	fn sign_call(
+		&self,
+		call: kusama_runtime::RuntimeCall,
+		nonce: u32,
+		current_block: u64,
+		period: u64,
+		genesis: H256,
+		acc: sp_core::sr25519::Pair,
+	) -> OpaqueExtrinsic {
+		use kusama_runtime as runtime;
 
+		let extra: runtime::SignedExtra = (
+			frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
+			frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
+			frame_system::CheckTxVersion::<runtime::Runtime>::new(),
+			frame_system::CheckGenesis::<runtime::Runtime>::new(),
+			frame_system::CheckMortality::<runtime::Runtime>::from(
+				sp_runtime::generic::Era::mortal(period, current_block),
+			),
+			frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
+			frame_system::CheckWeight::<runtime::Runtime>::new(),
+			pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
+		);
 
-/// Generates inherent data for benchmarking vine.
+		let payload = runtime::SignedPayload::from_raw(
+			call.clone(),
+			extra.clone(),
+			(
+				(),
+				runtime::VERSION.spec_version,
+				runtime::VERSION.transaction_version,
+				genesis,
+				genesis,
+				(),
+				(),
+				(),
+			),
+		);
+
+		let signature = payload.using_encoded(|p| acc.sign(p));
+		runtime::UncheckedExtrinsic::new_signed(
+			call,
+			sp_runtime::AccountId32::from(acc.public()).into(),
+			polkadot_core_primitives::Signature::Sr25519(signature.clone()),
+			extra,
+		)
+		.into()
+	}
+}
+
+#[cfg(feature = "rococo")]
+impl BenchmarkCallSigner<rococo_runtime::RuntimeCall, sp_core::sr25519::Pair>
+	for FullClient<rococo_runtime::RuntimeApi, RococoExecutorDispatch>
+{
+	fn sign_call(
+		&self,
+		call: rococo_runtime::RuntimeCall,
+		nonce: u32,
+		current_block: u64,
+		period: u64,
+		genesis: H256,
+		acc: sp_core::sr25519::Pair,
+	) -> OpaqueExtrinsic {
+		use rococo_runtime as runtime;
+
+		let extra: runtime::SignedExtra = (
+			frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
+			frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
+			frame_system::CheckTxVersion::<runtime::Runtime>::new(),
+			frame_system::CheckGenesis::<runtime::Runtime>::new(),
+			frame_system::CheckMortality::<runtime::Runtime>::from(
+				sp_runtime::generic::Era::mortal(period, current_block),
+			),
+			frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
+			frame_system::CheckWeight::<runtime::Runtime>::new(),
+			pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
+		);
+
+		let payload = runtime::SignedPayload::from_raw(
+			call.clone(),
+			extra.clone(),
+			(
+				(),
+				runtime::VERSION.spec_version,
+				runtime::VERSION.transaction_version,
+				genesis,
+				genesis,
+				(),
+				(),
+				(),
+			),
+		);
+
+		let signature = payload.using_encoded(|p| acc.sign(p));
+		runtime::UncheckedExtrinsic::new_signed(
+			call,
+			sp_runtime::AccountId32::from(acc.public()).into(),
+			polkadot_core_primitives::Signature::Sr25519(signature.clone()),
+			extra,
+		)
+		.into()
+	}
+}
+
+/// Generates inherent data for benchmarking Polkadot, Kusama, Westend and Rococo.
 ///
 /// Not to be used outside of benchmarking since it returns mocked values.
 pub fn benchmark_inherent_data(
-	header: vine_core_primitives::Header,
+	header: polkadot_core_primitives::Header,
 ) -> std::result::Result<sp_inherents::InherentData, sp_inherents::Error> {
 	use sp_inherents::InherentDataProvider;
 	let mut inherent_data = sp_inherents::InherentData::new();
@@ -255,14 +361,14 @@ pub fn benchmark_inherent_data(
 	let timestamp = sp_timestamp::InherentDataProvider::new(d.into());
 	futures::executor::block_on(timestamp.provide_inherent_data(&mut inherent_data))?;
 
-	let para_data = vine_primitives::v2::InherentData {
+	let para_data = polkadot_primitives::InherentData {
 		bitfields: Vec::new(),
 		backed_candidates: Vec::new(),
 		disputes: Vec::new(),
 		parent_header: header,
 	};
 
-	inherent_data.put_data(vine_primitives::v2::PARACHAINS_INHERENT_IDENTIFIER, &para_data)?;
+	inherent_data.put_data(polkadot_primitives::PARACHAINS_INHERENT_IDENTIFIER, &para_data)?;
 
 	Ok(inherent_data)
 }

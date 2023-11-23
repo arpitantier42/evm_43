@@ -1,5 +1,5 @@
-// Copyright 2017-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
 // Substrate is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate.  If not, see <http://www.gnu.org/licenses/>.
 
-//! Pallet to process purchase of vnes.
+//! Pallet to process purchase of DOTs.
 
 use frame_support::{
 	pallet_prelude::*,
@@ -70,15 +70,15 @@ impl AccountValidity {
 	}
 }
 
-/// All information about an account regarding the purchase of vnes.
+/// All information about an account regarding the purchase of DOTs.
 #[derive(Encode, Decode, Default, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 pub struct AccountStatus<Balance> {
 	/// The current validity status of the user. Will denote if the user has passed KYC,
 	/// how much they are able to purchase, and when their purchase process has completed.
 	validity: AccountValidity,
-	/// The amount of free vnes they have purchased.
+	/// The amount of free DOTs they have purchased.
 	free_balance: Balance,
-	/// The amount of locked vnes they have purchased.
+	/// The amount of locked DOTs they have purchased.
 	locked_balance: Balance,
 	/// Their sr25519/ed25519 signature verifying they have signed our required statement.
 	signature: Vec<u8>,
@@ -91,7 +91,6 @@ pub mod pallet {
 	use super::*;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
@@ -120,11 +119,11 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxStatementLength: Get<u32>;
 
-		/// The amount of purchased locked vnes that we will unlock for basic actions on the chain.
+		/// The amount of purchased locked DOTs that we will unlock for basic actions on the chain.
 		#[pallet::constant]
 		type UnlockedProportion: Get<Permill>;
 
-		/// The maximum amount of locked vnes that we will unlock.
+		/// The maximum amount of locked DOTs that we will unlock.
 		#[pallet::constant]
 		type MaxUnlocked: Get<BalanceOf<Self>>;
 	}
@@ -168,12 +167,12 @@ pub mod pallet {
 		VestingScheduleExists,
 	}
 
-	// A map of all participants in the vine purchase process.
+	// A map of all participants in the DOT purchase process.
 	#[pallet::storage]
 	pub(super) type Accounts<T: Config> =
 		StorageMap<_, Blake2_128Concat, T::AccountId, AccountStatus<BalanceOf<T>>, ValueQuery>;
 
-	// The account that will be used to payout participants of the vine purchase process.
+	// The account that will be used to payout participants of the DOT purchase process.
 	#[pallet::storage]
 	pub(super) type PaymentAccount<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
@@ -181,7 +180,7 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type Statement<T> = StorageValue<_, Vec<u8>, ValueQuery>;
 
-	// The block where all locked vnes will unlock.
+	// The block where all locked dots will unlock.
 	#[pallet::storage]
 	pub(super) type UnlockBlock<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
 
@@ -195,7 +194,8 @@ pub mod pallet {
 		/// We check that the account does not exist at this stage.
 		///
 		/// Origin must match the `ValidityOrigin`.
-		#[pallet::weight(Weight::from_ref_time(200_000_000) + T::DbWeight::get().reads_writes(4, 1))]
+		#[pallet::call_index(0)]
+		#[pallet::weight(Weight::from_parts(200_000_000, 0) + T::DbWeight::get().reads_writes(4, 1))]
 		pub fn create_account(
 			origin: OriginFor<T>,
 			who: T::AccountId,
@@ -232,6 +232,7 @@ pub mod pallet {
 		/// We check that the account exists at this stage, but has not completed the process.
 		///
 		/// Origin must match the `ValidityOrigin`.
+		#[pallet::call_index(1)]
 		#[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
 		pub fn update_validity_status(
 			origin: OriginFor<T>,
@@ -260,6 +261,7 @@ pub mod pallet {
 		/// We check that the account is valid for a balance transfer at this point.
 		///
 		/// Origin must match the `ValidityOrigin`.
+		#[pallet::call_index(2)]
 		#[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
 		pub fn update_balance(
 			origin: OriginFor<T>,
@@ -297,6 +299,7 @@ pub mod pallet {
 		///
 		/// Origin must match the configured `PaymentAccount` (if it is not configured then this
 		/// will always fail with `BadOrigin`).
+		#[pallet::call_index(3)]
 		#[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
 		pub fn payout(origin: OriginFor<T>, who: T::AccountId) -> DispatchResult {
 			// Payments must be made directly by the `PaymentAccount`.
@@ -330,7 +333,7 @@ pub mod pallet {
 
 					if !status.locked_balance.is_zero() {
 						let unlock_block = UnlockBlock::<T>::get();
-						// We allow some configurable portion of the purchased locked vnes to be unlocked for basic usage.
+						// We allow some configurable portion of the purchased locked DOTs to be unlocked for basic usage.
 						let unlocked = (T::UnlockedProportion::get() * status.locked_balance)
 							.min(T::MaxUnlocked::get());
 						let locked = status.locked_balance.saturating_sub(unlocked);
@@ -363,9 +366,10 @@ pub mod pallet {
 
 		/* Configuration Operations */
 
-		/// Set the account that will be used to payout users in the vine purchase process.
+		/// Set the account that will be used to payout users in the DOT purchase process.
 		///
 		/// Origin must match the `ConfigurationOrigin`
+		#[pallet::call_index(4)]
 		#[pallet::weight(T::DbWeight::get().writes(1))]
 		pub fn set_payment_account(origin: OriginFor<T>, who: T::AccountId) -> DispatchResult {
 			T::ConfigurationOrigin::ensure_origin(origin)?;
@@ -375,9 +379,10 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Set the statement that must be signed for a user to participate on the vine sale.
+		/// Set the statement that must be signed for a user to participate on the DOT sale.
 		///
 		/// Origin must match the `ConfigurationOrigin`
+		#[pallet::call_index(5)]
 		#[pallet::weight(T::DbWeight::get().writes(1))]
 		pub fn set_statement(origin: OriginFor<T>, statement: Vec<u8>) -> DispatchResult {
 			T::ConfigurationOrigin::ensure_origin(origin)?;
@@ -391,9 +396,10 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Set the block where locked vnes will become unlocked.
+		/// Set the block where locked DOTs will become unlocked.
 		///
 		/// Origin must match the `ConfigurationOrigin`
+		#[pallet::call_index(6)]
 		#[pallet::weight(T::DbWeight::get().writes(1))]
 		pub fn set_unlock_block(
 			origin: OriginFor<T>,
@@ -419,7 +425,7 @@ impl<T: Config> Pallet<T> {
 			.ok_or(Error::<T>::InvalidSignature)?
 			.into();
 
-		// In vine, the AccountId is always the same as the 32 byte public key.
+		// In Polkadot, the AccountId is always the same as the 32 byte public key.
 		let account_bytes: [u8; 32] = account_to_bytes(who)?;
 		let public_key = sr25519::Public::from_raw(account_bytes);
 
@@ -479,11 +485,10 @@ mod tests {
 		ord_parameter_types, parameter_types,
 		traits::{Currency, WithdrawReasons},
 	};
-	use pallet_balances::Error as BalancesError;
 	use sp_runtime::{
 		testing::Header,
 		traits::{BlakeTwo256, Dispatchable, IdentifyAccount, Identity, IdentityLookup, Verify},
-		MultiSignature,
+		ArithmeticError, MultiSignature,
 	};
 
 	type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -548,6 +553,10 @@ mod tests {
 		type MaxReserves = ();
 		type ReserveIdentifier = [u8; 8];
 		type WeightInfo = ();
+		type HoldIdentifier = ();
+		type FreezeIdentifier = ();
+		type MaxHolds = ConstU32<1>;
+		type MaxFreezes = ConstU32<1>;
 	}
 
 	parameter_types! {
@@ -809,6 +818,7 @@ mod tests {
 			);
 
 			// Account with vesting
+			Balances::make_free_balance_be(&alice(), 100);
 			assert_ok!(<Test as Config>::VestingSchedule::add_vesting_schedule(
 				&alice(),
 				100,
@@ -1121,6 +1131,7 @@ mod tests {
 			// Wrong Origin
 			assert_noop!(Purchase::payout(RuntimeOrigin::signed(alice()), alice(),), BadOrigin);
 			// Account with Existing Vesting Schedule
+			Balances::make_free_balance_be(&bob(), 100);
 			assert_ok!(
 				<Test as Config>::VestingSchedule::add_vesting_schedule(&bob(), 100, 1, 50,)
 			);
@@ -1157,8 +1168,8 @@ mod tests {
 				Permill::zero(),
 			));
 			assert_noop!(
-				Purchase::payout(RuntimeOrigin::signed(payment_account()), alice(),),
-				BalancesError::<Test, _>::InsufficientBalance
+				Purchase::payout(RuntimeOrigin::signed(payment_account()), alice()),
+				ArithmeticError::Underflow
 			);
 		});
 	}

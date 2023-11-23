@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{
 	collections::{HashMap, HashSet},
@@ -20,8 +20,8 @@ use std::{
 	time::Duration,
 };
 
-use vine_node_subsystem_test_helpers::TestSubsystemContextHandle;
-use vine_node_subsystem_util::TimeoutExt;
+use polkadot_node_subsystem_test_helpers::TestSubsystemContextHandle;
+use polkadot_node_subsystem_util::TimeoutExt;
 
 use futures::{
 	channel::{mpsc, oneshot},
@@ -32,22 +32,22 @@ use futures_timer::Delay;
 use sc_network as network;
 use sc_network::{config as netconfig, config::RequestResponseConfig, IfDisconnected};
 use sp_core::{testing::TaskExecutor, traits::SpawnNamed};
-use sp_keystore::SyncCryptoStorePtr;
+use sp_keystore::KeystorePtr;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	jaeger,
 	request_response::{v1, IncomingRequest, OutgoingRequest, Requests},
 };
-use vine_node_primitives::ErasureChunk;
-use vine_node_subsystem::{
+use polkadot_node_primitives::ErasureChunk;
+use polkadot_node_subsystem::{
 	messages::{
 		AllMessages, AvailabilityDistributionMessage, AvailabilityStoreMessage, ChainApiMessage,
 		NetworkBridgeTxMessage, RuntimeApiMessage, RuntimeApiRequest,
 	},
 	ActivatedLeaf, ActiveLeavesUpdate, FromOrchestra, LeafStatus, OverseerSignal,
 };
-use vine_node_subsystem_test_helpers as test_helpers;
-use vine_primitives::v2::{
+use polkadot_node_subsystem_test_helpers as test_helpers;
+use polkadot_primitives::{
 	CandidateHash, CoreState, GroupIndex, Hash, Id as ParaId, ScheduledCore, SessionInfo,
 	ValidatorIndex,
 };
@@ -83,7 +83,7 @@ pub struct TestState {
 	pub session_info: SessionInfo,
 	/// Cores per relay chain block.
 	pub cores: HashMap<Hash, Vec<CoreState>>,
-	pub keystore: SyncCryptoStorePtr,
+	pub keystore: KeystorePtr,
 }
 
 impl Default for TestState {

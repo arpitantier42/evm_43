@@ -1,20 +1,20 @@
-// Copyright 2017-2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use tikv_jemalloc_ctl::{epoch, stats, Error};
+use tikv_jemalloc_ctl::stats;
 
 #[derive(Clone)]
 pub struct MemoryAllocationTracker {
@@ -24,20 +24,20 @@ pub struct MemoryAllocationTracker {
 }
 
 impl MemoryAllocationTracker {
-	pub fn new() -> Result<Self, Error> {
+	pub fn new() -> Result<Self, tikv_jemalloc_ctl::Error> {
 		Ok(Self {
-			epoch: epoch::mib()?,
+			epoch: tikv_jemalloc_ctl::epoch::mib()?,
 			allocated: stats::allocated::mib()?,
 			resident: stats::resident::mib()?,
 		})
 	}
 
-	pub fn snapshot(&self) -> Result<MemoryAllocationSnapshot, Error> {
+	pub fn snapshot(&self) -> Result<MemoryAllocationSnapshot, tikv_jemalloc_ctl::Error> {
 		// update stats by advancing the allocation epoch
 		self.epoch.advance()?;
 
-		let allocated: u64 = self.allocated.read()? as _;
-		let resident: u64 = self.resident.read()? as _;
+		let allocated = self.allocated.read()?;
+		let resident = self.resident.read()?;
 		Ok(MemoryAllocationSnapshot { allocated, resident })
 	}
 }
@@ -47,7 +47,7 @@ impl MemoryAllocationTracker {
 #[derive(Debug, Clone)]
 pub struct MemoryAllocationSnapshot {
 	/// Total resident memory, in bytes.
-	pub resident: u64,
+	pub resident: usize,
 	/// Total allocated memory, in bytes.
-	pub allocated: u64,
+	pub allocated: usize,
 }

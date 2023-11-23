@@ -1,12 +1,12 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
@@ -15,7 +15,7 @@
 
 #[cfg(feature = "full-node")]
 use {
-	vine_node_subsystem_util::database::Database, std::io, std::path::PathBuf, std::sync::Arc,
+	polkadot_node_subsystem_util::database::Database, std::io, std::path::PathBuf, std::sync::Arc,
 };
 
 #[cfg(feature = "full-node")]
@@ -144,7 +144,7 @@ pub fn open_creating_rocksdb(
 	std::fs::create_dir_all(&path_str)?;
 	upgrade::try_upgrade_db(&path, DatabaseKind::RocksDB)?;
 	let db = Database::open(&db_config, &path_str)?;
-	let db = vine_node_subsystem_util::database::kvdb_impl::DbAdapter::new(
+	let db = polkadot_node_subsystem_util::database::kvdb_impl::DbAdapter::new(
 		db,
 		columns::v2::ORDERED_COL,
 	);
@@ -169,7 +169,7 @@ pub fn open_creating_paritydb(
 	let db = parity_db::Db::open_or_create(&upgrade::paritydb_version_2_config(&path))
 		.map_err(|err| io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))?;
 
-	let db = vine_node_subsystem_util::database::paritydb_impl::DbAdapter::new(
+	let db = polkadot_node_subsystem_util::database::paritydb_impl::DbAdapter::new(
 		db,
 		columns::v2::ORDERED_COL,
 	);

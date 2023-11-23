@@ -1,28 +1,28 @@
-// Copyright 2017-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Utilities for testing subsystems.
 
 #![warn(missing_docs)]
 
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	messages::AllMessages, overseer, FromOrchestra, OverseerSignal, SpawnGlue, SpawnedSubsystem,
 	SubsystemError, SubsystemResult,
 };
-use vine_node_subsystem_util::TimeoutExt;
+use polkadot_node_subsystem_util::TimeoutExt;
 
 use futures::{channel::mpsc, poll, prelude::*};
 use parking_lot::Mutex;
@@ -435,9 +435,9 @@ impl Future for Yield {
 mod tests {
 	use super::*;
 	use futures::executor::block_on;
-	use vine_node_subsystem::messages::CollatorProtocolMessage;
-	use vine_overseer::{dummy::dummy_overseer_builder, Handle, HeadSupportsParachains};
-	use vine_primitives::v2::Hash;
+	use polkadot_node_subsystem::messages::CollatorProtocolMessage;
+	use polkadot_overseer::{dummy::dummy_overseer_builder, Handle, HeadSupportsParachains};
+	use polkadot_primitives::Hash;
 	use sp_core::traits::SpawnNamed;
 
 	struct AlwaysSupportsParachains;
@@ -457,7 +457,6 @@ mod tests {
 			dummy_overseer_builder(spawner.clone(), AlwaysSupportsParachains, None)
 				.unwrap()
 				.replace_collator_protocol(|_| ForwardSubsystem(tx))
-				.leaves(vec![])
 				.build()
 				.unwrap();
 

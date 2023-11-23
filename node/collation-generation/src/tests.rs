@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 mod handle_new_activations {
 	use super::super::*;
@@ -22,25 +22,25 @@ mod handle_new_activations {
 		task::{Context as FuturesContext, Poll},
 		Future,
 	};
-	use vine_node_primitives::{
+	use polkadot_node_primitives::{
 		BlockData, Collation, CollationResult, MaybeCompressedPoV, PoV,
 	};
-	use vine_node_subsystem::{
+	use polkadot_node_subsystem::{
 		errors::RuntimeApiError,
 		messages::{AllMessages, RuntimeApiMessage, RuntimeApiRequest},
 	};
-	use vine_node_subsystem_test_helpers::{
+	use polkadot_node_subsystem_test_helpers::{
 		subsystem_test_harness, TestSubsystemContextHandle,
 	};
-	use vine_primitives::v2::{
+	use polkadot_primitives::{
 		CollatorPair, Id as ParaId, PersistedValidationData, ScheduledCore, ValidationCode,
 	};
 	use std::pin::Pin;
 
 	fn test_collation() -> Collation {
 		Collation {
-			upward_messages: vec![],
-			horizontal_messages: vec![],
+			upward_messages: Default::default(),
+			horizontal_messages: Default::default(),
 			new_validation_code: None,
 			head_data: dummy_head_data(),
 			proof_of_validity: MaybeCompressedPoV::Raw(PoV { block_data: BlockData(Vec::new()) }),

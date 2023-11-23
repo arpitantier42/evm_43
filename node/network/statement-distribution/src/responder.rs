@@ -1,16 +1,16 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// vine is free software: you can redistribute it and/or modify
+// Copyright (C) Parity Technologies (UK) Ltd.
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Large statement responding background task logic.
 
@@ -21,7 +21,7 @@ use futures::{
 };
 
 use fatality::Nested;
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	request_response::{
 		incoming::OutgoingResponse,
 		v1::{StatementFetchingRequest, StatementFetchingResponse},
@@ -29,7 +29,7 @@ use vine_node_network_protocol::{
 	},
 	PeerId, UnifiedReputationChange as Rep,
 };
-use vine_primitives::v2::{CandidateHash, CommittedCandidateReceipt, Hash};
+use polkadot_primitives::{CandidateHash, CommittedCandidateReceipt, Hash};
 
 use crate::LOG_TARGET;
 
@@ -65,7 +65,7 @@ pub async fn respond(
 		// 2. If we take too long, the requests timing out will not yet have had any data sent,
 		//    thus we wasted no bandwidth.
 		// 3. If the queue is full, requestes will get an immediate error instead of running in a
-		//    timeout, thus requesters can immediately try another vine and be faster.
+		//    timeout, thus requesters can immediately try another peer and be faster.
 		//
 		// From this perspective we would not want parallel response sending at all, but we don't
 		// want a single slow requester slowing everyone down, so we want some parallelism for that
@@ -90,7 +90,7 @@ pub async fn respond(
 		let (tx, rx) = oneshot::channel();
 		if let Err(err) = sender
 			.feed(ResponderMessage::GetData {
-				requesting_peer: req.vine,
+				requesting_peer: req.peer,
 				relay_parent: req.payload.relay_parent,
 				candidate_hash: req.payload.candidate_hash,
 				tx,

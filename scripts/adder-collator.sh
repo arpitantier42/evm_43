@@ -4,12 +4,12 @@
 
 set -e
 
+chainspec="rococo-local"
 
-
-# disabled until we can actually successfully register the chain with vine-js-api
-# if ! command -v vine-js-api > /dev/null; then
-#   echo "vine-js-api required; try"
-#   echo "  sudo yarn global add @vine/api-cli"
+# disabled until we can actually successfully register the chain with polkadot-js-api
+# if ! command -v polkadot-js-api > /dev/null; then
+#   echo "polkadot-js-api required; try"
+#   echo "  sudo yarn global add @polkadot/api-cli"
 #   exit 1
 # fi
 
@@ -26,11 +26,11 @@ last_modified_rust_file=$(
   cut -d' ' -f2-
 )
 
-vine="target/release/vine"
+polkadot="target/release/polkadot"
 adder_collator="target/release/adder-collator"
 
-# ensure the vine binary exists and is up to date
-if [ ! -x "$vine" ] || [ "$vine" -ot "$last_modified_rust_file" ]; then
+# ensure the polkadot binary exists and is up to date
+if [ ! -x "$polkadot" ] || [ "$polkadot" -ot "$last_modified_rust_file" ]; then
   cargo build --release
 fi
 # likewise for the adder collator
@@ -67,7 +67,7 @@ function flagify() {
 # start a node and label its output
 #
 # This function takes a single argument, the node name.
-# The name must be one of those which can be passed to the vine binary, in un-flagged form,
+# The name must be one of those which can be passed to the polkadot binary, in un-flagged form,
 # one of:
 #   alice, bob, charlie, dave, eve, ferdie, one, two
 function run_node() {
@@ -90,7 +90,7 @@ function run_node() {
   node_offset=$((node_offset+1))
 
   # start the node
-  "$vine" \
+  "$polkadot" \
     --chain "$chainspec" \
     --tmp \
     --port "$port" \
@@ -173,8 +173,8 @@ run_node Bob
 run_adder_collator AdderCollator
 
 # register the adder collator
-# doesn't work yet due to https://github.com/vine-js/tools/issues/185
-# vine-js-api \
+# doesn't work yet due to https://github.com/polkadot-js/tools/issues/185
+# polkadot-js-api \
 #   --ws ws://localhost:9944 \
 #   --sudo \
 #   --seed "//Alice" \

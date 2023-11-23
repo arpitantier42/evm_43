@@ -8,7 +8,7 @@ Since, at least at the level of the para abstraction, the collator-set for any g
 
 Validation of candidates is a heavy task, and furthermore, the [`PoV`][PoV] itself is a large piece of data. Empirically, `PoV`s are on the order of 10MB.
 
-> TODO: note the incremental validation function Ximin proposes at https://github.com/paritytech/vine/issues/1348
+> TODO: note the incremental validation function Ximin proposes at https://github.com/paritytech/polkadot/issues/1348
 
 As this network protocol serves as a bridge between collators and validators, it communicates primarily with one subsystem on behalf of each. As a collator, this will receive messages from the [`CollationGeneration`][CG] subsystem. As a validator, this will communicate only with the [`CandidateBacking`][CB].
 
@@ -24,14 +24,14 @@ Output:
 
 ## Functionality
 
-This network protocol uses the `Collation` vine-set of the [`NetworkBridge`][NB].
+This network protocol uses the `Collation` peer-set of the [`NetworkBridge`][NB].
 
 It uses the [`CollatorProtocolV1Message`](../../types/network.md#collator-protocol) as its `WireMessage`
 
 Since this protocol functions both for validators and collators, it is easiest to go through the protocol actions for each of them separately.
 
 Validators and collators.
-```vine process
+```dot process
 digraph {
   c1 [shape=MSquare, label="Collator 1"];
   c2 [shape=MSquare, label="Collator 2"];
@@ -64,9 +64,9 @@ Once connected to the relevant peers for the current group assigned to the core 
 
 ### Validators
 
-On the validator side of the protocol, validators need to accept incoming connections from collators. They should keep some vine slots open for accepting new speculative connections from collators and should disconnect from collators who are not relevant.
+On the validator side of the protocol, validators need to accept incoming connections from collators. They should keep some peer slots open for accepting new speculative connections from collators and should disconnect from collators who are not relevant.
 
-```vine process
+```dot process
 digraph G {
   label = "Declaring, advertising, and providing collations";
   labelloc = "t";
@@ -100,7 +100,7 @@ digraph G {
 
 When peers connect to us, they can `Declare` that they represent a collator with given public key and intend to collate on a specific para ID. Once they've declared that, and we checked their signature, they can begin to send advertisements of collations. The peers should not send us any advertisements for collations that are on a relay-parent outside of our view or for a para outside of the one they've declared.
 
-The protocol tracks advertisements received and the source of the advertisement. The advertisement source is the `PeerId` of the vine who sent the message. We accept one advertisement per collator per source per relay-parent.
+The protocol tracks advertisements received and the source of the advertisement. The advertisement source is the `PeerId` of the peer who sent the message. We accept one advertisement per collator per source per relay-parent.
 
 As a validator, we will handle requests from other subsystems to fetch a collation on a specific `ParaId` and relay-parent. These requests are made with the request response protocol `CollationFetchingRequest` request. To do so, we need to first check if we have already gathered a collation on that `ParaId` and relay-parent. If not, we need to select one of the advertisements and issue a request for it. If we've already issued a request, we shouldn't issue another one until the first has returned.
 

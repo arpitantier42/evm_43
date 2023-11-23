@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::{
 	prometheus::Registry, HeadSupportsParachains, InitializedOverseerBuilder, MetricsTrait,
@@ -21,7 +21,10 @@ use crate::{
 };
 use lru::LruCache;
 use orchestra::{FromOrchestra, SpawnedSubsystem, Subsystem, SubsystemContext};
-use vine_node_subsystem_types::{errors::SubsystemError, messages::*};
+use polkadot_node_subsystem_types::{errors::SubsystemError, messages::*};
+// Generated dummy messages
+use crate::messages::*;
+
 /// A dummy subsystem that implements [`Subsystem`] for all
 /// types of messages. Used for tests or as a placeholder.
 #[derive(Clone, Copy, Debug)]
@@ -187,7 +190,6 @@ where
 		.span_per_active_leaf(Default::default())
 		.active_leaves(Default::default())
 		.known_leaves(LruCache::new(KNOWN_LEAVES_CACHE_SIZE))
-		.leaves(Default::default())
 		.spawner(SpawnGlue(spawner))
 		.metrics(metrics)
 		.supports_parachains(supports_parachains);

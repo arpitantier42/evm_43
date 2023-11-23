@@ -1,18 +1,18 @@
-// Copyright 2017-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Utility module for subsystems
 //!
@@ -24,23 +24,24 @@
 
 #![warn(missing_docs)]
 
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	errors::{RuntimeApiError, SubsystemError},
 	messages::{RuntimeApiMessage, RuntimeApiRequest, RuntimeApiSender},
 	overseer, SubsystemSender,
 };
+use polkadot_primitives::ExecutorParams;
 
 pub use overseer::{
 	gen::{OrchestraError as OverseerError, Timeout},
 	Subsystem, TimeoutExt,
 };
 
-pub use vine_node_metrics::{metrics, Metronome};
+pub use polkadot_node_metrics::{metrics, Metronome};
 
 use futures::channel::{mpsc, oneshot};
 use parity_scale_codec::Encode;
 
-use vine_primitives::v2::{
+use polkadot_primitives::{
 	AuthorityDiscoveryId, CandidateEvent, CommittedCandidateReceipt, CoreState, EncodeAs,
 	GroupIndex, GroupRotationInfo, Hash, Id as ParaId, OccupiedCoreAssumption,
 	PersistedValidationData, ScrapedOnChainVotes, SessionIndex, SessionInfo, Signed,
@@ -48,20 +49,20 @@ use vine_primitives::v2::{
 	ValidatorSignature,
 };
 pub use rand;
-use sp_application_crypto::AppKey;
+use sp_application_crypto::AppCrypto;
 use sp_core::ByteArray;
-use sp_keystore::{CryptoStore, Error as KeystoreError, SyncCryptoStorePtr};
+use sp_keystore::{Error as KeystoreError, KeystorePtr};
 use std::time::Duration;
 use thiserror::Error;
 
 pub use metered;
-pub use vine_node_network_protocol::MIN_GOSSIP_PEERS;
+pub use polkadot_node_network_protocol::MIN_GOSSIP_PEERS;
 
 pub use determine_new_blocks::determine_new_blocks;
 
 /// These reexports are required so that external crates can use the `delegated_subsystem` macro properly.
 pub mod reexports {
-	pub use vine_overseer::gen::{SpawnedSubsystem, Spawner, Subsystem, SubsystemContext};
+	pub use polkadot_overseer::gen::{SpawnedSubsystem, Spawner, Subsystem, SubsystemContext};
 }
 
 /// A rolling session window cache.
@@ -71,6 +72,12 @@ pub mod runtime;
 
 /// Database trait for subsystem.
 pub mod database;
+
+/// Nested message sending
+///
+/// Useful for having mostly synchronous code, with submodules spawning short lived asynchronous
+/// tasks, sending messages back.
+pub mod nesting_sender;
 
 mod determine_new_blocks;
 
@@ -109,6 +116,9 @@ pub enum Error {
 	/// Already forwarding errors to another sender
 	#[error("AlreadyForwarding")]
 	AlreadyForwarding,
+	/// Data that are supposed to be there a not there
+	#[error("Data are not available")]
+	DataNotAvailable,
 }
 
 impl From<OverseerError> for Error {
@@ -203,24 +213,70 @@ specialize_requests! {
 	fn request_validation_code_hash(para_id: ParaId, assumption: OccupiedCoreAssumption)
 		-> Option<ValidationCodeHash>; ValidationCodeHash;
 	fn request_on_chain_votes() -> Option<ScrapedOnChainVotes>; FetchOnChainVotes;
+	fn request_session_executor_params(session_index: SessionIndex) -> Option<ExecutorParams>; SessionExecutorParams;
+}
+
+/// Requests executor parameters from the runtime effective at given relay-parent. First obtains
+/// session index at the relay-parent, relying on the fact that it should be cached by the runtime
+/// API caching layer even if the block itself has already been pruned. Then requests executor
+/// parameters by session index.
+/// Returns an error if failed to communicate to the runtime, or the parameters are not in the
+/// storage, which should never happen.
+/// Returns default execution parameters if the runtime doesn't yet support `SessionExecutorParams`
+/// API call.
+/// Otherwise, returns execution parameters returned by the runtime.
+pub async fn executor_params_at_relay_parent(
+	relay_parent: Hash,
+	sender: &mut impl overseer::SubsystemSender<RuntimeApiMessage>,
+) -> Result<ExecutorParams, Error> {
+	match request_session_index_for_child(relay_parent, sender).await.await {
+		Err(err) => {
+			// Failed to communicate with the runtime
+			Err(Error::Oneshot(err))
+		},
+		Ok(Err(err)) => {
+			// Runtime has failed to obtain a session index at the relay-parent.
+			Err(Error::RuntimeApi(err))
+		},
+		Ok(Ok(session_index)) => {
+			match request_session_executor_params(relay_parent, session_index, sender).await.await {
+				Err(err) => {
+					// Failed to communicate with the runtime
+					Err(Error::Oneshot(err))
+				},
+				Ok(Err(RuntimeApiError::NotSupported { .. })) => {
+					// Runtime doesn't yet support the api requested, should execute anyway
+					// with default set of parameters
+					Ok(ExecutorParams::default())
+				},
+				Ok(Err(err)) => {
+					// Runtime failed to execute the request
+					Err(Error::RuntimeApi(err))
+				},
+				Ok(Ok(None)) => {
+					// Storage doesn't contain a parameter set for the given session; should
+					// never happen
+					Err(Error::DataNotAvailable)
+				},
+				Ok(Ok(Some(executor_params))) => Ok(executor_params),
+			}
+		},
+	}
 }
 
 /// From the given set of validators, find the first key we can sign with, if any.
-pub async fn signing_key(
-	validators: &[ValidatorId],
-	keystore: &SyncCryptoStorePtr,
-) -> Option<ValidatorId> {
-	signing_key_and_index(validators, keystore).await.map(|(k, _)| k)
+pub fn signing_key(validators: &[ValidatorId], keystore: &KeystorePtr) -> Option<ValidatorId> {
+	signing_key_and_index(validators, keystore).map(|(k, _)| k)
 }
 
 /// From the given set of validators, find the first key we can sign with, if any, and return it
 /// along with the validator index.
-pub async fn signing_key_and_index(
+pub fn signing_key_and_index(
 	validators: &[ValidatorId],
-	keystore: &SyncCryptoStorePtr,
+	keystore: &KeystorePtr,
 ) -> Option<(ValidatorId, ValidatorIndex)> {
 	for (i, v) in validators.iter().enumerate() {
-		if CryptoStore::has_keys(&**keystore, &[(v.to_raw_vec(), ValidatorId::ID)]).await {
+		if keystore.has_keys(&[(v.to_raw_vec(), ValidatorId::ID)]) {
 			return Some((v.clone(), ValidatorIndex(i as _)))
 		}
 	}
@@ -231,19 +287,15 @@ pub async fn signing_key_and_index(
 ///
 /// Returns `Ok(None)` if the private key that correponds to that validator ID is not found in the
 /// given keystore. Returns an error if the key could not be used for signing.
-pub async fn sign(
-	keystore: &SyncCryptoStorePtr,
+pub fn sign(
+	keystore: &KeystorePtr,
 	key: &ValidatorId,
 	data: &[u8],
 ) -> Result<Option<ValidatorSignature>, KeystoreError> {
-	let signature =
-		CryptoStore::sign_with(&**keystore, ValidatorId::ID, &key.into(), &data).await?;
-
-	match signature {
-		Some(sig) =>
-			Ok(Some(sig.try_into().map_err(|_| KeystoreError::KeyNotSupported(ValidatorId::ID))?)),
-		None => Ok(None),
-	}
+	let signature = keystore
+		.sr25519_sign(ValidatorId::ID, key.as_ref(), data)?
+		.map(|sig| sig.into());
+	Ok(signature)
 }
 
 /// Find the validator group the given validator index belongs to.
@@ -313,11 +365,7 @@ pub struct Validator {
 
 impl Validator {
 	/// Get a struct representing this node's validator if this node is in fact a validator in the context of the given block.
-	pub async fn new<S>(
-		parent: Hash,
-		keystore: SyncCryptoStorePtr,
-		sender: &mut S,
-	) -> Result<Self, Error>
+	pub async fn new<S>(parent: Hash, keystore: KeystorePtr, sender: &mut S) -> Result<Self, Error>
 	where
 		S: SubsystemSender<RuntimeApiMessage>,
 	{
@@ -333,19 +381,19 @@ impl Validator {
 
 		let validators = validators?;
 
-		Self::construct(&validators, signing_context, keystore).await
+		Self::construct(&validators, signing_context, keystore)
 	}
 
 	/// Construct a validator instance without performing runtime fetches.
 	///
 	/// This can be useful if external code also needs the same data.
-	pub async fn construct(
+	pub fn construct(
 		validators: &[ValidatorId],
 		signing_context: SigningContext,
-		keystore: SyncCryptoStorePtr,
+		keystore: KeystorePtr,
 	) -> Result<Self, Error> {
 		let (key, index) =
-			signing_key_and_index(validators, &keystore).await.ok_or(Error::NotAValidator)?;
+			signing_key_and_index(validators, &keystore).ok_or(Error::NotAValidator)?;
 
 		Ok(Validator { signing_context, key, index })
 	}
@@ -366,11 +414,11 @@ impl Validator {
 	}
 
 	/// Sign a payload with this validator
-	pub async fn sign<Payload: EncodeAs<RealPayload>, RealPayload: Encode>(
+	pub fn sign<Payload: EncodeAs<RealPayload>, RealPayload: Encode>(
 		&self,
-		keystore: SyncCryptoStorePtr,
+		keystore: KeystorePtr,
 		payload: Payload,
 	) -> Result<Option<Signed<Payload, RealPayload>>, KeystoreError> {
-		Signed::sign(&keystore, payload, &self.signing_context, self.index, &self.key).await
+		Signed::sign(&keystore, payload, &self.signing_context, self.index, &self.key)
 	}
 }

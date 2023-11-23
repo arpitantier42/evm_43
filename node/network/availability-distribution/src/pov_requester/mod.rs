@@ -1,36 +1,36 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! PoV requester takes care of requesting PoVs from validators of a backing group.
 
 use futures::{channel::oneshot, future::BoxFuture, FutureExt};
 
-use vine_node_network_protocol::request_response::{
+use polkadot_node_network_protocol::request_response::{
 	outgoing::{RequestError, Requests},
 	v1::{PoVFetchingRequest, PoVFetchingResponse},
 	OutgoingRequest, Recipient,
 };
-use vine_node_primitives::PoV;
-use vine_node_subsystem::{
+use polkadot_node_primitives::PoV;
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{IfDisconnected, NetworkBridgeTxMessage},
 	overseer,
 };
-use vine_node_subsystem_util::runtime::RuntimeInfo;
-use vine_primitives::v2::{
+use polkadot_node_subsystem_util::runtime::RuntimeInfo;
+use polkadot_primitives::{
 	AuthorityDiscoveryId, CandidateHash, Hash, Id as ParaId, ValidatorIndex,
 };
 
@@ -52,7 +52,18 @@ pub async fn fetch_pov<Context>(
 	pov_hash: Hash,
 	tx: oneshot::Sender<PoV>,
 	metrics: Metrics,
+	span: &jaeger::Span,
 ) -> Result<()> {
+	let _span = span
+		.child("fetch-pov")
+		.with_trace_id(candidate_hash)
+		.with_validator_index(from_validator)
+		.with_candidate(candidate_hash)
+		.with_para_id(para_id)
+		.with_relay_parent(parent)
+		.with_string_tag("pov-hash", format!("{:?}", pov_hash))
+		.with_stage(jaeger::Stage::AvailabilityDistribution);
+
 	let info = &runtime.get_session_info(ctx.sender(), parent).await?.session_info;
 	let authority_id = info
 		.discovery_keys
@@ -71,13 +82,9 @@ pub async fn fetch_pov<Context>(
 	))
 	.await;
 
-	let span = jaeger::Span::new(candidate_hash, "fetch-pov")
-		.with_validator_index(from_validator)
-		.with_relay_parent(parent)
-		.with_para_id(para_id);
 	ctx.spawn(
 		"pov-fetcher",
-		fetch_pov_job(para_id, pov_hash, authority_id, pending_response.boxed(), span, tx, metrics)
+		fetch_pov_job(para_id, pov_hash, authority_id, pending_response.boxed(), tx, metrics)
 			.boxed(),
 	)
 	.map_err(|e| FatalError::SpawnTask(e))?;
@@ -90,11 +97,10 @@ async fn fetch_pov_job(
 	pov_hash: Hash,
 	authority_id: AuthorityDiscoveryId,
 	pending_response: BoxFuture<'static, std::result::Result<PoVFetchingResponse, RequestError>>,
-	span: jaeger::Span,
 	tx: oneshot::Sender<PoV>,
 	metrics: Metrics,
 ) {
-	if let Err(err) = do_fetch_pov(pov_hash, pending_response, span, tx, metrics).await {
+	if let Err(err) = do_fetch_pov(pov_hash, pending_response, tx, metrics).await {
 		gum::warn!(target: LOG_TARGET, ?err, ?para_id, ?pov_hash, ?authority_id, "fetch_pov_job");
 	}
 }
@@ -103,7 +109,6 @@ async fn fetch_pov_job(
 async fn do_fetch_pov(
 	pov_hash: Hash,
 	pending_response: BoxFuture<'static, std::result::Result<PoVFetchingResponse, RequestError>>,
-	_span: jaeger::Span,
 	tx: oneshot::Sender<PoV>,
 	metrics: Metrics,
 ) -> Result<()> {
@@ -136,12 +141,12 @@ mod tests {
 	use parity_scale_codec::Encode;
 	use sp_core::testing::TaskExecutor;
 
-	use vine_node_primitives::BlockData;
-	use vine_node_subsystem::messages::{
+	use polkadot_node_primitives::BlockData;
+	use polkadot_node_subsystem::messages::{
 		AllMessages, AvailabilityDistributionMessage, RuntimeApiMessage, RuntimeApiRequest,
 	};
-	use vine_node_subsystem_test_helpers as test_helpers;
-	use vine_primitives::v2::{CandidateHash, Hash, ValidatorIndex};
+	use polkadot_node_subsystem_test_helpers as test_helpers;
+	use polkadot_primitives::{CandidateHash, Hash, ValidatorIndex};
 	use test_helpers::mock::make_ferdie_keystore;
 
 	use super::*;
@@ -168,7 +173,7 @@ mod tests {
 			TaskExecutor,
 		>(pool.clone());
 		let keystore = make_ferdie_keystore();
-		let mut runtime = vine_node_subsystem_util::runtime::RuntimeInfo::new(Some(keystore));
+		let mut runtime = polkadot_node_subsystem_util::runtime::RuntimeInfo::new(Some(keystore));
 
 		let (tx, rx) = oneshot::channel();
 		let testee = async {
@@ -182,6 +187,7 @@ mod tests {
 				pov_hash,
 				tx,
 				Metrics::new_dummy(),
+				&jaeger::Span::Disabled,
 			)
 			.await
 			.expect("Should succeed");

@@ -1,9 +1,9 @@
 # Glossary
 
-Here you can find definitions of a bunch of jargon, usually specific to the vine project.
+Here you can find definitions of a bunch of jargon, usually specific to the Polkadot project.
 
 - **Approval Checker:** A validator who randomly self-selects so to perform validity checks on a parablock which is pending approval.
-- **BABE:** (Blind Assignment for Blockchain Extension). The algorithm validators use to safely extend the Relay Chain. See [the vine wiki][0] for more information.
+- **BABE:** (Blind Assignment for Blockchain Extension). The algorithm validators use to safely extend the Relay Chain. See [the Polkadot wiki][0] for more information.
 - **Backable Candidate:** A Parachain Candidate which is backed by a majority of validators assigned to a given parachain.
 - **Backed Candidate:** A Backable Candidate noted in a relay-chain block
 - **Backing:** A set of statements proving that a Parachain Candidate is backable.
@@ -19,7 +19,7 @@ exactly one downward message queue.
 - **Module Entry Point:** A recipient of new information presented to the Runtime. This may trigger routines.
 - **Module Routine:** A piece of code executed within a module by block initialization, closing, or upon an entry point being triggered. This may execute computation, and read or write storage.
 - **MQC:** (Message Queue Chain). A cryptographic data structure that resembles an append-only linked list which doesn't store original values but only their hashes. The whole structure is described by a single hash, referred as a "head". When a value is appended, it's contents hashed with the previous head creating a hash that becomes a new head.
-- **Node:** A participant in the vine network, who follows the protocols of communication and connection to other nodes. Nodes form a vine-to-vine network topology without a central authority.
+- **Node:** A participant in the Polkadot network, who follows the protocols of communication and connection to other nodes. Nodes form a peer-to-peer network topology without a central authority.
 - **Parachain Candidate, or Candidate:** A proposed block for inclusion into a parachain.
 - **Parablock:** A block in a parachain.
 - **Parachain:** A constituent chain secured by the Relay Chain's validators.
@@ -46,4 +46,4 @@ exactly one downward message queue.
 
 Also of use is the [Substrate Glossary](https://substrate.dev/docs/en/knowledgebase/getting-started/glossary).
 
-[0]: https://wiki.vine.network/docs/learn-consensus
+[0]: https://wiki.polkadot.network/docs/learn-consensus

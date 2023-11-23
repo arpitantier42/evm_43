@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Unit tests for Gossip Support Subsystem.
 
@@ -29,15 +29,15 @@ use sp_consensus_babe::{AllowedSlots, BabeEpochConfiguration, Epoch as BabeEpoch
 use sp_core::crypto::Pair as PairT;
 use sp_keyring::Sr25519Keyring;
 
-use vine_node_network_protocol::grid_topology::{SessionGridTopology, TopologyPeerInfo};
-use vine_node_subsystem::{
+use polkadot_node_network_protocol::grid_topology::{SessionGridTopology, TopologyPeerInfo};
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{AllMessages, RuntimeApiMessage, RuntimeApiRequest},
 	ActivatedLeaf, LeafStatus,
 };
-use vine_node_subsystem_test_helpers as test_helpers;
-use vine_node_subsystem_util::TimeoutExt as _;
-use vine_primitives::v2::{GroupIndex, IndexedVec};
+use polkadot_node_subsystem_test_helpers as test_helpers;
+use polkadot_node_subsystem_util::TimeoutExt as _;
+use polkadot_primitives::{GroupIndex, IndexedVec};
 use test_helpers::mock::make_ferdie_keystore;
 
 use super::*;
@@ -121,14 +121,14 @@ impl MockAuthorityDiscovery {
 impl AuthorityDiscovery for MockAuthorityDiscovery {
 	async fn get_addresses_by_authority_id(
 		&mut self,
-		authority: vine_primitives::v2::AuthorityDiscoveryId,
+		authority: polkadot_primitives::AuthorityDiscoveryId,
 	) -> Option<HashSet<sc_network::Multiaddr>> {
 		self.addrs.get(&authority).cloned()
 	}
 	async fn get_authority_ids_by_peer_id(
 		&mut self,
-		peer_id: vine_node_network_protocol::PeerId,
-	) -> Option<HashSet<vine_primitives::v2::AuthorityDiscoveryId>> {
+		peer_id: polkadot_node_network_protocol::PeerId,
+	) -> Option<HashSet<polkadot_primitives::AuthorityDiscoveryId>> {
 		self.authorities.get(&peer_id).cloned()
 	}
 }

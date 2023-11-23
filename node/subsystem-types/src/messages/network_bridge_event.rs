@@ -1,28 +1,28 @@
-// Copyright 2017-2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{collections::HashSet, convert::TryFrom};
 
 pub use sc_network::{PeerId, ReputationChange};
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	grid_topology::SessionGridTopology, peer_set::ProtocolVersion, ObservedRole, OurView, View,
 	WrongVariant,
 };
-use vine_primitives::v2::{AuthorityDiscoveryId, SessionIndex, ValidatorIndex};
+use polkadot_primitives::{AuthorityDiscoveryId, SessionIndex, ValidatorIndex};
 
 /// A struct indicating new gossip topology.
 #[derive(Debug, Clone, PartialEq)]
@@ -38,16 +38,16 @@ pub struct NewGossipTopology {
 /// Events from network.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NetworkBridgeEvent<M> {
-	/// A vine has connected.
+	/// A peer has connected.
 	PeerConnected(PeerId, ObservedRole, ProtocolVersion, Option<HashSet<AuthorityDiscoveryId>>),
 
-	/// A vine has disconnected.
+	/// A peer has disconnected.
 	PeerDisconnected(PeerId),
 
 	/// Our neighbors in the new gossip topology for the session.
 	/// We're not necessarily connected to all of them.
 	///
-	/// This message is issued only on the validation vine set.
+	/// This message is issued only on the validation peer set.
 	///
 	/// Note, that the distribution subsystems need to handle the last
 	/// view update of the newly added gossip peers manually.
@@ -67,8 +67,8 @@ impl<M> NetworkBridgeEvent<M> {
 	/// Focus an overarching network-bridge event into some more specific variant.
 	///
 	/// This tries to transform M in `PeerMessage` to a message type specific to a subsystem.
-	/// It is used to dispatch events coming from a vine set to the various subsystems that are
-	/// handled within that vine set. More concretely a `ValidationProtocol` will be transformed
+	/// It is used to dispatch events coming from a peer set to the various subsystems that are
+	/// handled within that peer set. More concretely a `ValidationProtocol` will be transformed
 	/// for example into a `BitfieldDistributionMessage` in case of the `BitfieldDistribution`
 	/// constructor.
 	///
@@ -85,20 +85,20 @@ impl<M> NetworkBridgeEvent<M> {
 		T: TryFrom<&'a M, Error = WrongVariant>,
 	{
 		Ok(match *self {
-			NetworkBridgeEvent::PeerMessage(ref vine, ref msg) =>
-				NetworkBridgeEvent::PeerMessage(*vine, T::try_from(msg)?),
+			NetworkBridgeEvent::PeerMessage(ref peer, ref msg) =>
+				NetworkBridgeEvent::PeerMessage(*peer, T::try_from(msg)?),
 			NetworkBridgeEvent::PeerConnected(
-				ref vine,
+				ref peer,
 				ref role,
 				ref version,
 				ref authority_id,
-			) => NetworkBridgeEvent::PeerConnected(*vine, *role, *version, authority_id.clone()),
-			NetworkBridgeEvent::PeerDisconnected(ref vine) =>
-				NetworkBridgeEvent::PeerDisconnected(*vine),
+			) => NetworkBridgeEvent::PeerConnected(*peer, *role, *version, authority_id.clone()),
+			NetworkBridgeEvent::PeerDisconnected(ref peer) =>
+				NetworkBridgeEvent::PeerDisconnected(*peer),
 			NetworkBridgeEvent::NewGossipTopology(ref topology) =>
 				NetworkBridgeEvent::NewGossipTopology(topology.clone()),
-			NetworkBridgeEvent::PeerViewChange(ref vine, ref view) =>
-				NetworkBridgeEvent::PeerViewChange(*vine, view.clone()),
+			NetworkBridgeEvent::PeerViewChange(ref peer, ref view) =>
+				NetworkBridgeEvent::PeerViewChange(*peer, view.clone()),
 			NetworkBridgeEvent::OurViewChange(ref view) =>
 				NetworkBridgeEvent::OurViewChange(view.clone()),
 		})

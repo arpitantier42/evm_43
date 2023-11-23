@@ -1,13 +1,13 @@
 # Messaging Overview
 
-The vine Host has a few mechanisms that are responsible for message passing. They can be generally divided
+The Polkadot Host has a few mechanisms that are responsible for message passing. They can be generally divided
 on two categories: Horizontal and Vertical. Horizontal Message Passing (HMP) refers to mechanisms
 that are responsible for exchanging messages between parachains. Vertical Message Passing (VMP) is
 used for communication between the relay chain and parachains.
 
 ## Vertical Message Passing
 
-```vine process
+```dot process
 digraph {
     rc [shape=Mdiamond label="Relay Chain"];
     p1 [shape=box label = "Parachain"];
@@ -30,7 +30,7 @@ from a parachain up to the relay chain. Upward messages are essentially byte blo
 by the relay-chain according to the XCM standard.
 
 The XCM standard is a common vocabulary of messages. The XCM standard doesn't require a particular interpretation of
-a message. However, the parachains host (e.g. vine) guarantees certain semantics for those.
+a message. However, the parachains host (e.g. Polkadot) guarantees certain semantics for those.
 
 Moreover, while most XCM messages are handled by the on-chain XCM interpreter, some of the messages are special
 cased. Specifically, those messages can be checked during the acceptance criteria and thus invalid
@@ -51,7 +51,7 @@ namely messages meant to request opening and closing HRMP channels (HRMP will be
 
 ## Horizontal Message Passing
 
-```vine process
+```dot process
 digraph {
     rc [shape=Mdiamond color="gray" fontcolor="gray" label="Relay Chain"];
 
@@ -95,8 +95,8 @@ messages are supplied (i.e. preimages), rest are provided as hashes.
 
 Further details can be found at the official repository for the
 [Cross-Consensus Message Format (XCM)](https://github.com/paritytech/xcm-format/blob/master/README.md), as well as
-at the [W3F research website](https://research.web3.foundation/en/latest/vine/XCMP.html) and
-[this blogpost](https://medium.com/web3foundation/peers-messaging-scheme-b1ec560908b7).
+at the [W3F research website](https://research.web3.foundation/en/latest/polkadot/XCMP.html) and
+[this blogpost](https://medium.com/web3foundation/polkadots-messaging-scheme-b1ec560908b7).
 
 HRMP (Horizontally Relay-routed Message Passing) is a stop gap that predates XCMP. Semantically, it mimics XCMP's interface.
 The crucial difference from XCMP though is that all the messages are stored in the relay-chain storage. That makes

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::{
 	configuration::Pallet as Configuration,
@@ -69,6 +69,7 @@ where
 	<T as frame_system::Config>::RuntimeOrigin: From<crate::Origin>,
 {
 	let config = Configuration::<T>::config();
+	let ed = T::Currency::minimum_balance();
 	let deposit: BalanceOf<T> = config.hrmp_sender_deposit.unique_saturated_into();
 	let capacity = config.hrmp_channel_max_capacity;
 	let message_size = config.hrmp_channel_max_message_size;
@@ -83,10 +84,10 @@ where
 
 	// Make both a parachain if they are already not.
 	if !Paras::<T>::is_parachain(sender) {
-		register_parachain_with_balance::<T>(sender, deposit);
+		register_parachain_with_balance::<T>(sender, deposit + ed);
 	}
 	if !Paras::<T>::is_parachain(recipient) {
-		register_parachain_with_balance::<T>(recipient, deposit);
+		register_parachain_with_balance::<T>(recipient, deposit + ed);
 	}
 
 	assert_ok!(Hrmp::<T>::hrmp_init_open_channel(
@@ -147,9 +148,10 @@ frame_benchmarking::benchmarks! {
 		let recipient_id: ParaId = 2u32.into();
 
 		// make sure para is registered, and has enough balance.
+		let ed = T::Currency::minimum_balance();
 		let deposit: BalanceOf<T> = Configuration::<T>::config().hrmp_sender_deposit.unique_saturated_into();
-		register_parachain_with_balance::<T>(sender_id, deposit);
-		register_parachain_with_balance::<T>(recipient_id, deposit);
+		register_parachain_with_balance::<T>(sender_id, deposit + ed);
+		register_parachain_with_balance::<T>(recipient_id, deposit + ed);
 
 		let capacity = Configuration::<T>::config().hrmp_channel_max_capacity;
 		let message_size = Configuration::<T>::config().hrmp_channel_max_message_size;
@@ -302,12 +304,13 @@ frame_benchmarking::benchmarks! {
 		let recipient_id: ParaId = 2u32.into();
 
 		// make sure para is registered, and has enough balance.
+		let ed = T::Currency::minimum_balance();
 		let sender_deposit: BalanceOf<T> =
 			Configuration::<T>::config().hrmp_sender_deposit.unique_saturated_into();
 		let recipient_deposit: BalanceOf<T> =
 			Configuration::<T>::config().hrmp_recipient_deposit.unique_saturated_into();
-		register_parachain_with_balance::<T>(sender_id, sender_deposit);
-		register_parachain_with_balance::<T>(recipient_id, recipient_deposit);
+		register_parachain_with_balance::<T>(sender_id, sender_deposit + ed);
+		register_parachain_with_balance::<T>(recipient_id, recipient_deposit + ed);
 
 		let capacity = Configuration::<T>::config().hrmp_channel_max_capacity;
 		let message_size = Configuration::<T>::config().hrmp_channel_max_message_size;

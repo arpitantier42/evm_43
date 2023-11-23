@@ -13,5 +13,5 @@ export PATH=$CFG_DIR:$PATH
 cd $CFG_DIR
 # see 0002-upgrade-node.zndsl to view the args.
 curl -L -O $1
-chmod +x $CFG_DIR/vine
-echo $(vine --version)
+chmod +x $CFG_DIR/polkadot
+echo $(polkadot --version)

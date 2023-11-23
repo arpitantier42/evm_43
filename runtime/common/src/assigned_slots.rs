@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! This pallet allows to assign permanent (long-lived) or temporary
 //! (short-lived) parachain slots to paras, leveraging the existing
@@ -21,7 +21,7 @@
 //! The dispatchables must be called from the configured origin
 //! (typically `Sudo` or a governance origin).
 //! This pallet should not be used on a production relay chain,
-//! only on a test relay chain (e.g. ).
+//! only on a test relay chain (e.g. Rococo).
 
 use crate::{
 	slots::{self, Pallet as Slots, WeightInfo},
@@ -32,7 +32,7 @@ use frame_support::{pallet_prelude::*, traits::Currency};
 use frame_system::pallet_prelude::*;
 pub use pallet::*;
 use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
-use primitives::v2::Id as ParaId;
+use primitives::Id as ParaId;
 use runtime_parachains::{
 	configuration,
 	paras::{self},
@@ -78,7 +78,6 @@ pub mod pallet {
 	use super::*;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
@@ -200,6 +199,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		// TODO: Benchmark this
 		/// Assign a permanent parachain slot and immediately create a lease for it.
+		#[pallet::call_index(0)]
 		#[pallet::weight(((MAXIMUM_BLOCK_WEIGHT / 10) as Weight, DispatchClass::Operational))]
 		pub fn assign_perm_parachain_slot(origin: OriginFor<T>, id: ParaId) -> DispatchResult {
 			T::AssignSlotOrigin::ensure_origin(origin)?;
@@ -258,6 +258,7 @@ pub mod pallet {
 		/// Assign a temporary parachain slot. The function tries to create a lease for it
 		/// immediately if `SlotLeasePeriodStart::Current` is specified, and if the number
 		/// of currently active temporary slots is below `MaxTemporarySlotPerLeasePeriod`.
+		#[pallet::call_index(1)]
 		#[pallet::weight(((MAXIMUM_BLOCK_WEIGHT / 10) as Weight, DispatchClass::Operational))]
 		pub fn assign_temp_parachain_slot(
 			origin: OriginFor<T>,
@@ -341,6 +342,7 @@ pub mod pallet {
 
 		// TODO: Benchmark this
 		/// Unassign a permanent or temporary parachain slot
+		#[pallet::call_index(2)]
 		#[pallet::weight(((MAXIMUM_BLOCK_WEIGHT / 10) as Weight, DispatchClass::Operational))]
 		pub fn unassign_parachain_slot(origin: OriginFor<T>, id: ParaId) -> DispatchResult {
 			T::AssignSlotOrigin::ensure_origin(origin.clone())?;
@@ -546,7 +548,7 @@ mod tests {
 	use frame_support::{assert_noop, assert_ok, parameter_types};
 	use frame_system::EnsureRoot;
 	use pallet_balances;
-	use primitives::v2::{BlockNumber, Header};
+	use primitives::{BlockNumber, Header};
 	use runtime_parachains::{
 		configuration as parachains_configuration, paras as parachains_paras,
 		shared as parachains_shared,
@@ -629,6 +631,10 @@ mod tests {
 		type MaxLocks = ();
 		type MaxReserves = ();
 		type ReserveIdentifier = [u8; 8];
+		type HoldIdentifier = ();
+		type FreezeIdentifier = ();
+		type MaxHolds = ConstU32<1>;
+		type MaxFreezes = ConstU32<1>;
 	}
 
 	impl parachains_configuration::Config for Test {
@@ -643,6 +649,7 @@ mod tests {
 		type RuntimeEvent = RuntimeEvent;
 		type WeightInfo = parachains_paras::TestWeightInfo;
 		type UnsignedPriority = ParasUnsignedPriority;
+		type QueueFootprinter = ();
 		type NextSessionRotation = crate::mock::TestNextSessionRotation;
 	}
 

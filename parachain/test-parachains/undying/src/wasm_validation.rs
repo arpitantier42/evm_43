@@ -1,18 +1,18 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! WASM validation for the `Undying` parachain.
 
@@ -37,8 +37,10 @@ pub extern "C" fn validate_block(params: *const u8, len: usize) -> u64 {
 	parachain::write_result(&ValidationResult {
 		head_data: GenericHeadData(new_head.encode()),
 		new_validation_code: None,
-		upward_messages: sp_std::vec::Vec::new(),
-		horizontal_messages: sp_std::vec::Vec::new(),
+		upward_messages: sp_std::vec::Vec::new().try_into().expect("empty vec fits within bounds"),
+		horizontal_messages: sp_std::vec::Vec::new()
+			.try_into()
+			.expect("empty vec fits within bounds"),
 		processed_downward_messages: 0,
 		hrmp_watermark: params.relay_parent_number,
 	})

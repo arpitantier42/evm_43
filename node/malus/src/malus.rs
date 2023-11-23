@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! A malus or nemesis node launch code.
 
@@ -28,7 +28,7 @@ use variants::*;
 
 /// Define the different variants of behavior.
 #[derive(Debug, Parser)]
-#[command(about = "Malus - the nemesis of vine.", version, rename_all = "kebab-case")]
+#[command(about = "Malus - the nemesis of polkadot.", version, rename_all = "kebab-case")]
 enum NemesisVariant {
 	/// Suggest a candidate with an invalid proof of validity.
 	SuggestGarbageCandidate(SuggestGarbageCandidateOptions),
@@ -39,11 +39,11 @@ enum NemesisVariant {
 
 	#[allow(missing_docs)]
 	#[command(name = "prepare-worker", hide = true)]
-	PvfPrepareWorker(vine_cli::ValidationWorkerCommand),
+	PvfPrepareWorker(polkadot_cli::ValidationWorkerCommand),
 
 	#[allow(missing_docs)]
 	#[command(name = "execute-worker", hide = true)]
-	PvfExecuteWorker(vine_cli::ValidationWorkerCommand),
+	PvfExecuteWorker(polkadot_cli::ValidationWorkerCommand),
 }
 
 #[derive(Debug, Parser)]
@@ -63,12 +63,12 @@ impl MalusCli {
 			NemesisVariant::BackGarbageCandidate(opts) => {
 				let BackGarbageCandidateOptions { percentage, cli } = opts;
 
-				vine_cli::run_node(cli, BackGarbageCandidates { percentage }, finality_delay)?
+				polkadot_cli::run_node(cli, BackGarbageCandidates { percentage }, finality_delay)?
 			},
 			NemesisVariant::SuggestGarbageCandidate(opts) => {
 				let SuggestGarbageCandidateOptions { percentage, cli } = opts;
 
-				vine_cli::run_node(
+				polkadot_cli::run_node(
 					cli,
 					SuggestGarbageCandidates { percentage },
 					finality_delay,
@@ -82,7 +82,7 @@ impl MalusCli {
 					cli,
 				} = opts;
 
-				vine_cli::run_node(
+				polkadot_cli::run_node(
 					cli,
 					DisputeValidCandidates { fake_validation, fake_validation_error, percentage },
 					finality_delay,
@@ -97,7 +97,10 @@ impl MalusCli {
 
 				#[cfg(not(target_os = "android"))]
 				{
-					vine_node_core_pvf::prepare_worker_entrypoint(&cmd.socket_path);
+					polkadot_node_core_pvf_worker::prepare_worker_entrypoint(
+						&cmd.socket_path,
+						None,
+					);
 				}
 			},
 			NemesisVariant::PvfExecuteWorker(cmd) => {
@@ -108,7 +111,10 @@ impl MalusCli {
 
 				#[cfg(not(target_os = "android"))]
 				{
-					vine_node_core_pvf::execute_worker_entrypoint(&cmd.socket_path);
+					polkadot_node_core_pvf_worker::execute_worker_entrypoint(
+						&cmd.socket_path,
+						None,
+					);
 				}
 			},
 		}

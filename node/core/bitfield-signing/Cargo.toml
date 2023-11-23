@@ -1,5 +1,5 @@
 [package]
-name = "vine-node-core-bitfield-signing"
+name = "polkadot-node-core-bitfield-signing"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,13 +7,13 @@ edition.workspace = true
 [dependencies]
 futures = "0.3.21"
 gum = { package = "tracing-gum", path = "../../gum" }
-vine-primitives = { path = "../../../primitives" }
-vine-node-subsystem = { path = "../../subsystem" }
-vine-node-subsystem-util = { path = "../../subsystem-util" }
-sp-keystore = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+polkadot-primitives = { path = "../../../primitives" }
+polkadot-node-subsystem = { path = "../../subsystem" }
+polkadot-node-subsystem-util = { path = "../../subsystem-util" }
+sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 wasm-timer = "0.2.5"
 thiserror = "1.0.31"
 
 [dev-dependencies]
-vine-node-subsystem-test-helpers = { path = "../../subsystem-test-helpers" }
-test-helpers = { package = "vine-primitives-test-helpers", path = "../../../primitives/test-helpers" }
+polkadot-node-subsystem-test-helpers = { path = "../../subsystem-test-helpers" }
+test-helpers = { package = "polkadot-primitives-test-helpers", path = "../../../primitives/test-helpers" }

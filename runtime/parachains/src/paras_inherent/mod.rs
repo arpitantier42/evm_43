@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Provides glue code over the scheduler and inclusion modules, and accepting
 //! one inherent per block that can include new para candidates and bitfields.
@@ -29,7 +29,7 @@ use crate::{
 	initializer,
 	metrics::METRICS,
 	scheduler::{self, CoreAssignment, FreedReason},
-	shared, ump, ParaId,
+	shared, ParaId,
 };
 use bitvec::prelude::BitVec;
 use frame_support::{
@@ -39,7 +39,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use pallet_babe::{self, ParentBlockRandomness};
-use primitives::v2::{
+use primitives::{
 	BackedCandidate, CandidateHash, CandidateReceipt, CheckedDisputeStatementSet,
 	CheckedMultiDisputeStatementSet, CoreIndex, DisputeStatementSet,
 	InherentData as ParachainsInherentData, MultiDisputeStatementSet, ScrapedOnChainVotes,
@@ -104,7 +104,6 @@ pub mod pallet {
 	use super::*;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
@@ -212,7 +211,7 @@ pub mod pallet {
 			let inherent_data = Self::create_inherent_inner(data)?;
 			// Sanity check: session changes can invalidate an inherent,
 			// and we _really_ don't want that to happen.
-			// See <https://github.com/paritytech/vine/issues/1327>
+			// See <https://github.com/paritytech/polkadot/issues/1327>
 
 			// Calling `Self::enter` here is a safe-guard, to avoid any discrepancy between on-chain checks
 			// (`enter`) and the off-chain checks by the block author (this function). Once we are confident
@@ -277,6 +276,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Enter the paras inherent. This will process bitfields and backed candidates.
+		#[pallet::call_index(0)]
 		#[pallet::weight((
 			paras_inherent_total_weight::<T>(
 				data.backed_candidates.as_slice(),
@@ -348,7 +348,6 @@ impl<T: Config> Pallet<T> {
 		let (checked_disputes, total_consumed_weight) = {
 			// Obtain config params..
 			let config = <configuration::Pallet<T>>::config();
-			let max_spam_slots = config.dispute_max_spam_slots;
 			let post_conclusion_acceptance_period =
 				config.dispute_post_conclusion_acceptance_period;
 
@@ -362,7 +361,6 @@ impl<T: Config> Pallet<T> {
 			let dispute_set_validity_check = move |set| {
 				T::DisputesHandler::filter_dispute_data(
 					set,
-					max_spam_slots,
 					post_conclusion_acceptance_period,
 					verify_dispute_sigs,
 				)
@@ -414,8 +412,7 @@ impl<T: Config> Pallet<T> {
 			// Note that `process_checked_multi_dispute_data` will iterate and import each
 			// dispute; so the input here must be reasonably bounded,
 			// which is guaranteed by the checks and weight limitation above.
-			let _ =
-				T::DisputesHandler::process_checked_multi_dispute_data(checked_disputes.clone())?;
+			let _ = T::DisputesHandler::process_checked_multi_dispute_data(&checked_disputes)?;
 			METRICS.on_disputes_imported(checked_disputes.len() as u64);
 
 			if T::DisputesHandler::is_frozen() {
@@ -534,10 +531,6 @@ impl<T: Config> Pallet<T> {
 		// Note which of the scheduled cores were actually occupied by a backed candidate.
 		<scheduler::Pallet<T>>::occupied(&occupied);
 
-		// Give some time slice to dispatch pending upward messages.
-		// this is max config.ump_service_total_weight
-		let _ump_weight = <ump::Pallet<T>>::process_pending_upward_messages();
-
 		METRICS.on_after_filter(total_consumed_weight.ref_time());
 
 		Ok(Some(total_consumed_weight).into())
@@ -594,7 +587,6 @@ impl<T: Config> Pallet<T> {
 		}
 
 		let config = <configuration::Pallet<T>>::config();
-		let max_spam_slots = config.dispute_max_spam_slots;
 		let post_conclusion_acceptance_period = config.dispute_post_conclusion_acceptance_period;
 
 		// TODO: Better if we can convert this to `with_transactional` and handle an error if
@@ -608,7 +600,6 @@ impl<T: Config> Pallet<T> {
 			let dispute_statement_set_valid = move |set: DisputeStatementSet| {
 				T::DisputesHandler::filter_dispute_data(
 					set,
-					max_spam_slots,
 					post_conclusion_acceptance_period,
 					// `DisputeCoordinator` on the node side only forwards
 					// valid dispute statement sets and hence this does not
@@ -629,13 +620,11 @@ impl<T: Config> Pallet<T> {
 			// we don't care about fresh or not disputes
 			// this writes them to storage, so let's query it via those means
 			// if this fails for whatever reason, that's ok
-			let _ = T::DisputesHandler::process_checked_multi_dispute_data(
-				checked_disputes_sets.clone(),
-			)
-			.map_err(|e| {
-				log::warn!(target: LOG_TARGET, "MultiDisputesData failed to update: {:?}", e);
-				e
-			});
+			let _ = T::DisputesHandler::process_checked_multi_dispute_data(&checked_disputes_sets)
+				.map_err(|e| {
+					log::warn!(target: LOG_TARGET, "MultiDisputesData failed to update: {:?}", e);
+					e
+				});
 
 			// Contains the disputes that are concluded in the current session only,
 			// since these are the only ones that are relevant for the occupied cores
@@ -798,7 +787,7 @@ where
 /// as well as their indices in ascending order.
 fn random_sel<X, F: Fn(&X) -> Weight>(
 	rng: &mut rand_chacha::ChaChaRng,
-	selectables: Vec<X>,
+	selectables: &[X],
 	mut preferred_indices: Vec<usize>,
 	weight_fn: F,
 	weight_limit: Weight,
@@ -899,7 +888,7 @@ fn apply_weight_limit<T: Config + inclusion::Config>(
 		let (acc_candidate_weight, indices) =
 			random_sel::<BackedCandidate<<T as frame_system::Config>::Hash>, _>(
 				rng,
-				candidates.clone(),
+				&candidates,
 				preferred_indices,
 				|c| backed_candidate_weight::<T>(c),
 				max_consumable_by_candidates,
@@ -918,7 +907,7 @@ fn apply_weight_limit<T: Config + inclusion::Config>(
 	// into the block and skip the candidates entirely
 	let (total_consumed, indices) = random_sel::<UncheckedSignedAvailabilityBitfield, _>(
 		rng,
-		bitfields.clone(),
+		&bitfields,
 		vec![],
 		|_| <<T as Config>::WeightInfo as WeightInfo>::enter_bitfields(),
 		max_consumable_weight,
@@ -1289,7 +1278,7 @@ fn limit_and_sanitize_disputes<
 		// Select remote disputes at random until the block is full
 		let (_acc_remote_disputes_weight, mut indices) = random_sel::<u32, _>(
 			rng,
-			d,
+			&d,
 			vec![],
 			|v| <<T as Config>::WeightInfo as WeightInfo>::enter_variable_disputes(*v),
 			max_consumable_weight.saturating_sub(weight_acc),

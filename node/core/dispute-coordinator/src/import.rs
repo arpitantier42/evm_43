@@ -1,18 +1,18 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Vote import logic.
 //!
@@ -28,12 +28,13 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use vine_node_primitives::{
+use polkadot_node_primitives::{
 	disputes::ValidCandidateVotes, CandidateVotes, DisputeStatus, SignedDisputeStatement, Timestamp,
 };
-use vine_node_subsystem_util::rolling_session_window::RollingSessionWindow;
-use vine_primitives::v2::{
-	CandidateReceipt, DisputeStatement, IndexedVec, SessionIndex, SessionInfo,
+use polkadot_node_subsystem::overseer;
+use polkadot_node_subsystem_util::runtime::RuntimeInfo;
+use polkadot_primitives::{
+	CandidateReceipt, DisputeStatement, Hash, IndexedVec, SessionIndex, SessionInfo,
 	ValidDisputeStatementKind, ValidatorId, ValidatorIndex, ValidatorPair, ValidatorSignature,
 };
 use sc_keystore::LocalKeystore;
@@ -50,18 +51,29 @@ pub struct CandidateEnvironment<'a> {
 	controlled_indices: HashSet<ValidatorIndex>,
 }
 
+#[overseer::contextbounds(DisputeCoordinator, prefix = self::overseer)]
 impl<'a> CandidateEnvironment<'a> {
 	/// Create `CandidateEnvironment`.
 	///
 	/// Return: `None` in case session is outside of session window.
-	pub fn new(
+	pub async fn new<Context>(
 		keystore: &LocalKeystore,
-		session_window: &'a RollingSessionWindow,
+		ctx: &mut Context,
+		runtime_info: &'a mut RuntimeInfo,
 		session_index: SessionIndex,
-	) -> Option<Self> {
-		let session = session_window.session_info(session_index)?;
-		let controlled_indices = find_controlled_validator_indices(keystore, &session.validators);
-		Some(Self { session_index, session, controlled_indices })
+		relay_parent: Hash,
+	) -> Option<CandidateEnvironment<'a>> {
+		let session_info = match runtime_info
+			.get_session_info_by_index(ctx.sender(), relay_parent, session_index)
+			.await
+		{
+			Ok(extended_session_info) => &extended_session_info.session_info,
+			Err(_) => return None,
+		};
+
+		let controlled_indices =
+			find_controlled_validator_indices(keystore, &session_info.validators);
+		Some(Self { session_index, session: session_info, controlled_indices })
 	}
 
 	/// Validators in the candidate's session.
@@ -87,60 +99,69 @@ impl<'a> CandidateEnvironment<'a> {
 
 /// Whether or not we already issued some statement about a candidate.
 pub enum OwnVoteState {
-	/// We already voted/issued a statement for the candidate.
-	Voted,
-	/// We already voted/issued a statement for the candidate and it was an approval vote.
+	/// Our votes, if any.
+	Voted(Vec<(ValidatorIndex, (DisputeStatement, ValidatorSignature))>),
+
+	/// We are not a parachain validator in the session.
 	///
-	/// Needs special treatment as we have to make sure to propagate it to peers, to guarantee the
-	/// dispute can conclude.
-	VotedApproval(Vec<(ValidatorIndex, ValidatorSignature)>),
-	/// We not yet voted for the dispute.
-	NoVote,
+	/// Hence we cannot vote.
+	CannotVote,
 }
 
 impl OwnVoteState {
-	fn new<'a>(votes: &CandidateVotes, env: &CandidateEnvironment<'a>) -> Self {
-		let mut our_valid_votes = env
-			.controlled_indices()
+	fn new(votes: &CandidateVotes, env: &CandidateEnvironment<'_>) -> Self {
+		let controlled_indices = env.controlled_indices();
+		if controlled_indices.is_empty() {
+			return Self::CannotVote
+		}
+
+		let our_valid_votes = controlled_indices
 			.iter()
 			.filter_map(|i| votes.valid.raw().get_key_value(i))
-			.peekable();
-		let mut our_invalid_votes =
-			env.controlled_indices.iter().filter_map(|i| votes.invalid.get_key_value(i));
-		let has_valid_votes = our_valid_votes.peek().is_some();
-		let has_invalid_votes = our_invalid_votes.next().is_some();
-		let our_approval_votes: Vec<_> = our_valid_votes
-			.filter_map(|(index, (k, sig))| {
-				if let ValidDisputeStatementKind::ApprovalChecking = k {
-					Some((*index, sig.clone()))
-				} else {
-					None
-				}
-			})
-			.collect();
+			.map(|(index, (kind, sig))| (*index, (DisputeStatement::Valid(*kind), sig.clone())));
+		let our_invalid_votes = controlled_indices
+			.iter()
+			.filter_map(|i| votes.invalid.get_key_value(i))
+			.map(|(index, (kind, sig))| (*index, (DisputeStatement::Invalid(*kind), sig.clone())));
 
-		if !our_approval_votes.is_empty() {
-			return Self::VotedApproval(our_approval_votes)
-		}
-		if has_valid_votes || has_invalid_votes {
-			return Self::Voted
-		}
-		Self::NoVote
+		Self::Voted(our_valid_votes.chain(our_invalid_votes).collect())
 	}
 
-	/// Whether or not we issued a statement for the candidate already.
-	fn voted(&self) -> bool {
+	/// Is a vote from us missing but we are a validator able to vote?
+	fn vote_missing(&self) -> bool {
 		match self {
-			Self::Voted | Self::VotedApproval(_) => true,
-			Self::NoVote => false,
+			Self::Voted(votes) if votes.is_empty() => true,
+			Self::Voted(_) | Self::CannotVote => false,
 		}
 	}
 
 	/// Get own approval votes, if any.
-	fn approval_votes(&self) -> Option<&Vec<(ValidatorIndex, ValidatorSignature)>> {
+	///
+	/// Empty iterator means, no approval votes. `None` means, there will never be any (we cannot
+	/// vote).
+	fn approval_votes(
+		&self,
+	) -> Option<impl Iterator<Item = (ValidatorIndex, &ValidatorSignature)>> {
 		match self {
-			Self::VotedApproval(votes) => Some(&votes),
-			_ => None,
+			Self::Voted(votes) => Some(votes.iter().filter_map(|(index, (kind, sig))| {
+				if let DisputeStatement::Valid(ValidDisputeStatementKind::ApprovalChecking) = kind {
+					Some((*index, sig))
+				} else {
+					None
+				}
+			})),
+			Self::CannotVote => None,
+		}
+	}
+
+	/// Get our votes if there are any.
+	///
+	/// Empty iterator means, no votes. `None` means, there will never be any (we cannot
+	/// vote).
+	fn votes(&self) -> Option<&Vec<(ValidatorIndex, (DisputeStatement, ValidatorSignature))>> {
+		match self {
+			Self::Voted(votes) => Some(&votes),
+			Self::CannotVote => None,
 		}
 	}
 }
@@ -158,6 +179,9 @@ pub struct CandidateVoteState<Votes> {
 
 	/// Current dispute status, if there is any.
 	dispute_status: Option<DisputeStatus>,
+
+	/// Are there `byzantine threshold + 1` invalid votes
+	byzantine_threshold_against: bool,
 }
 
 impl CandidateVoteState<CandidateVotes> {
@@ -170,7 +194,12 @@ impl CandidateVoteState<CandidateVotes> {
 			valid: ValidCandidateVotes::new(),
 			invalid: BTreeMap::new(),
 		};
-		Self { votes, own_vote: OwnVoteState::NoVote, dispute_status: None }
+		Self {
+			votes,
+			own_vote: OwnVoteState::CannotVote,
+			dispute_status: None,
+			byzantine_threshold_against: false,
+		}
 	}
 
 	/// Create a new `CandidateVoteState` from already existing votes.
@@ -179,15 +208,14 @@ impl CandidateVoteState<CandidateVotes> {
 
 		let n_validators = env.validators().len();
 
-		let supermajority_threshold =
-			vine_primitives::v2::supermajority_threshold(n_validators);
+		let supermajority_threshold = polkadot_primitives::supermajority_threshold(n_validators);
 
 		// We have a dispute, if we have votes on both sides:
 		let is_disputed = !votes.invalid.is_empty() && !votes.valid.raw().is_empty();
 
-		let dispute_status = if is_disputed {
+		let (dispute_status, byzantine_threshold_against) = if is_disputed {
 			let mut status = DisputeStatus::active();
-			let byzantine_threshold = vine_primitives::v2::byzantine_threshold(n_validators);
+			let byzantine_threshold = polkadot_primitives::byzantine_threshold(n_validators);
 			let is_confirmed = votes.voted_indices().len() > byzantine_threshold;
 			if is_confirmed {
 				status = status.confirm();
@@ -201,12 +229,12 @@ impl CandidateVoteState<CandidateVotes> {
 			if concluded_against {
 				status = status.conclude_against(now);
 			};
-			Some(status)
+			(Some(status), votes.invalid.len() > byzantine_threshold)
 		} else {
-			None
+			(None, false)
 		};
 
-		Self { votes, own_vote, dispute_status }
+		Self { votes, own_vote, dispute_status, byzantine_threshold_against }
 	}
 
 	/// Import fresh statements.
@@ -308,8 +336,12 @@ impl CandidateVoteState<CandidateVotes> {
 
 	/// Extract `CandidateVotes` for handling import of new statements.
 	fn into_old_state(self) -> (CandidateVotes, CandidateVoteState<()>) {
-		let CandidateVoteState { votes, own_vote, dispute_status } = self;
-		(votes, CandidateVoteState { votes: (), own_vote, dispute_status })
+		let CandidateVoteState { votes, own_vote, dispute_status, byzantine_threshold_against } =
+			self;
+		(
+			votes,
+			CandidateVoteState { votes: (), own_vote, dispute_status, byzantine_threshold_against },
+		)
 	}
 }
 
@@ -327,14 +359,23 @@ impl<V> CandidateVoteState<V> {
 		self.dispute_status.map_or(false, |s| s.is_confirmed_concluded())
 	}
 
-	/// This machine already cast some vote in that dispute/for that candidate.
-	pub fn has_own_vote(&self) -> bool {
-		self.own_vote.voted()
+	/// Are we a validator in the session, but have not yet voted?
+	pub fn own_vote_missing(&self) -> bool {
+		self.own_vote.vote_missing()
 	}
 
 	/// Own approval votes if any:
-	pub fn own_approval_votes(&self) -> Option<&Vec<(ValidatorIndex, ValidatorSignature)>> {
+	pub fn own_approval_votes(
+		&self,
+	) -> Option<impl Iterator<Item = (ValidatorIndex, &ValidatorSignature)>> {
 		self.own_vote.approval_votes()
+	}
+
+	/// Get own votes if there are any.
+	pub fn own_votes(
+		&self,
+	) -> Option<&Vec<(ValidatorIndex, (DisputeStatement, ValidatorSignature))>> {
+		self.own_vote.votes()
 	}
 
 	/// Whether or not there is a dispute and it has already enough valid votes to conclude.
@@ -446,6 +487,13 @@ impl ImportResult {
 	/// Whether or not any dispute just concluded either invalid or valid due to the import.
 	pub fn is_freshly_concluded(&self) -> bool {
 		self.is_freshly_concluded_against() || self.is_freshly_concluded_for()
+	}
+
+	/// Whether or not the invalid vote count for the dispute went beyond the byzantine threshold
+	/// after the last import
+	pub fn has_fresh_byzantine_threshold_against(&self) -> bool {
+		!self.old_state().byzantine_threshold_against &&
+			self.new_state().byzantine_threshold_against
 	}
 
 	/// Modify this `ImportResult`s, by importing additional approval votes.

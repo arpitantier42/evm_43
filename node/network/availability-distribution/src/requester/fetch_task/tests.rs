@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashMap;
 
@@ -28,10 +28,10 @@ use futures::{
 use sc_network as network;
 use sp_keyring::Sr25519Keyring;
 
-use vine_node_network_protocol::request_response::{v1, Recipient};
-use vine_node_primitives::{BlockData, PoV, Proof};
-use vine_node_subsystem::messages::AllMessages;
-use vine_primitives::v2::{CandidateHash, ValidatorIndex};
+use polkadot_node_network_protocol::request_response::{v1, Recipient};
+use polkadot_node_primitives::{BlockData, PoV, Proof};
+use polkadot_node_subsystem::messages::AllMessages;
+use polkadot_primitives::{CandidateHash, ValidatorIndex};
 
 use super::*;
 use crate::{metrics::Metrics, tests::mock::get_valid_chunk_data};
@@ -244,7 +244,7 @@ impl TestRun {
 						_ => panic!("Unexpected request"),
 					};
 					let response =
-						self.chunk_responses.get(&req.vine).ok_or(network::RequestFailure::Refused);
+						self.chunk_responses.get(&req.peer).ok_or(network::RequestFailure::Refused);
 
 					if let Ok(ChunkFetchingResponse::Chunk(resp)) = &response {
 						if self.valid_chunks.contains(&resp.chunk) {

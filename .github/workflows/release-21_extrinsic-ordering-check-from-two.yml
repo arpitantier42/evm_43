@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        chain: [polkadot]
+        chain: [polkadot, kusama, westend, rococo]
 
     steps:
       - name: Checkout sources

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{
 	num::NonZeroUsize,
@@ -30,7 +30,7 @@ use futures::{
 };
 
 use gum::CandidateHash;
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	authority_discovery::AuthorityDiscovery,
 	request_response::{
 		incoming::{self, OutgoingResponse, OutgoingResponseSender},
@@ -39,12 +39,12 @@ use vine_node_network_protocol::{
 	},
 	PeerId, UnifiedReputationChange as Rep,
 };
-use vine_node_primitives::DISPUTE_WINDOW;
-use vine_node_subsystem::{
+use polkadot_node_primitives::DISPUTE_WINDOW;
+use polkadot_node_subsystem::{
 	messages::{DisputeCoordinatorMessage, ImportStatementsResult},
 	overseer,
 };
-use vine_node_subsystem_util::{runtime, runtime::RuntimeInfo};
+use polkadot_node_subsystem_util::{runtime, runtime::RuntimeInfo};
 
 use crate::{
 	metrics::{FAILED, SUCCEEDED},
@@ -69,7 +69,7 @@ const COST_INVALID_REQUEST: Rep = Rep::CostMajor("Received message could not be 
 const COST_INVALID_SIGNATURE: Rep = Rep::Malicious("Signatures were invalid.");
 const COST_INVALID_IMPORT: Rep =
 	Rep::Malicious("Import was deemed invalid by dispute-coordinator.");
-const COST_NOT_A_VALIDATOR: Rep = Rep::CostMajor("Reporting vine was not a validator.");
+const COST_NOT_A_VALIDATOR: Rep = Rep::CostMajor("Reporting peer was not a validator.");
 /// Mildly punish peers exceeding their rate limit.
 ///
 /// For honest peers this should rarely happen, but if it happens we would not want to disconnect
@@ -103,7 +103,7 @@ pub struct DisputesReceiver<Sender, AD> {
 	/// Channel to retrieve incoming requests from.
 	receiver: IncomingRequestReceiver<DisputeRequest>,
 
-	/// Rate limiting queue for each vine (only authorities).
+	/// Rate limiting queue for each peer (only authorities).
 	peer_queues: PeerQueues,
 
 	/// Currently active batches of imports per candidate.
@@ -212,7 +212,7 @@ where
 			MuxedMessage::WakePeerQueuesPopReqs(reqs) => {
 				// Phase 2:
 				for req in reqs {
-					// No early return - we cannot cancel imports of one vine, because the import of
+					// No early return - we cannot cancel imports of one peer, because the import of
 					// another failed:
 					match log_error(self.start_import_or_batch(req).await) {
 						Ok(()) => {},
@@ -278,13 +278,13 @@ where
 	/// - Dispatch message to corresponding queue in `peer_queues`.
 	/// - If queue is full, drop message and change reputation of sender.
 	async fn dispatch_to_queues(&mut self, req: IncomingRequest<DisputeRequest>) -> JfyiResult<()> {
-		let vine = req.vine;
+		let peer = req.peer;
 		// Only accept messages from validators, in case there are multiple `AuthorityId`s, we
 		// just take the first one. On session boundaries this might allow validators to double
 		// their rate limit for a short period of time, which seems acceptable.
 		let authority_id = match self
 			.authority_discovery
-			.get_authority_ids_by_peer_id(vine)
+			.get_authority_ids_by_peer_id(peer)
 			.await
 			.and_then(|s| s.into_iter().next())
 		{
@@ -294,8 +294,8 @@ where
 					reputation_changes: vec![COST_NOT_A_VALIDATOR],
 					sent_feedback: None,
 				})
-				.map_err(|_| JfyiError::SendResponses(vec![vine]))?;
-				return Err(JfyiError::NotAValidator(vine).into())
+				.map_err(|_| JfyiError::SendResponses(vec![peer]))?;
+				return Err(JfyiError::NotAValidator(peer).into())
 			},
 			Some(auth_id) => auth_id,
 		};
@@ -305,7 +305,7 @@ where
 			gum::debug!(
 				target: LOG_TARGET,
 				?authority_id,
-				?vine,
+				?peer,
 				"Peer hit the rate limit - dropping message."
 			);
 			req.send_outgoing_response(OutgoingResponse {
@@ -313,7 +313,7 @@ where
 				reputation_changes: vec![COST_APPARENT_FLOOD],
 				sent_feedback: None,
 			})
-			.map_err(|_| JfyiError::SendResponses(vec![vine]))?;
+			.map_err(|_| JfyiError::SendResponses(vec![peer]))?;
 			return Err(JfyiError::AuthorityFlooding(authority_id))
 		}
 		Ok(())
@@ -327,7 +327,7 @@ where
 		&mut self,
 		incoming: IncomingRequest<DisputeRequest>,
 	) -> Result<()> {
-		let IncomingRequest { vine, payload, pending_response } = incoming;
+		let IncomingRequest { peer, payload, pending_response } = incoming;
 
 		let info = self
 			.runtime
@@ -349,9 +349,9 @@ where
 						reputation_changes: vec![COST_INVALID_SIGNATURE],
 						sent_feedback: None,
 					})
-					.map_err(|_| JfyiError::SetPeerReputation(vine))?;
+					.map_err(|_| JfyiError::SetPeerReputation(peer))?;
 
-				return Err(From::from(JfyiError::InvalidSignature(vine)))
+				return Err(From::from(JfyiError::InvalidSignature(peer)))
 			},
 			Ok(votes) => votes,
 		};
@@ -364,20 +364,20 @@ where
 				gum::trace!(
 					target: LOG_TARGET,
 					?candidate_hash,
-					?vine,
+					?peer,
 					"No batch yet - triggering immediate import"
 				);
 				let import = PreparedImport {
 					candidate_receipt: batch.candidate_receipt().clone(),
 					statements: vec![valid_vote, invalid_vote],
-					requesters: vec![(vine, pending_response)],
+					requesters: vec![(peer, pending_response)],
 				};
 				self.start_import(import).await;
 			},
 			FoundBatch::Found(batch) => {
 				gum::trace!(target: LOG_TARGET, ?candidate_hash, "Batch exists - batching request");
 				let batch_result =
-					batch.add_votes(valid_vote, invalid_vote, vine, pending_response);
+					batch.add_votes(valid_vote, invalid_vote, peer, pending_response);
 
 				if let Err(pending_response) = batch_result {
 					// We don't expect honest peers to send redundant votes within a single batch,
@@ -389,7 +389,7 @@ where
 					// resolution is unaffected.
 					gum::debug!(
 						target: LOG_TARGET,
-						?vine,
+						?peer,
 						"Peer sent completely redundant votes within a single batch - that looks fishy!",
 					);
 					pending_response
@@ -402,8 +402,8 @@ where
 							reputation_changes: Vec::new(),
 							sent_feedback: None,
 						})
-						.map_err(|_| JfyiError::SendResponses(vec![vine]))?;
-					return Err(From::from(JfyiError::RedundantMessage(vine)))
+						.map_err(|_| JfyiError::SendResponses(vec![peer]))?;
+					return Err(From::from(JfyiError::RedundantMessage(peer)))
 				}
 			},
 		}
@@ -475,9 +475,9 @@ async fn send_responses_to_requesters(import_result: ImportResult) -> JfyiResult
 	};
 
 	let mut sending_failed_for = Vec::new();
-	for (vine, pending_response) in requesters {
+	for (peer, pending_response) in requesters {
 		if let Err(()) = pending_response.send_outgoing_response(mk_response()) {
-			sending_failed_for.push(vine);
+			sending_failed_for.push(peer);
 		}
 	}
 

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 use super::{
 	BackedCandidate, Config, DisputeStatementSet, UncheckedSignedAvailabilityBitfield, Weight,
 };
@@ -37,15 +37,15 @@ pub struct TestWeightInfo;
 impl WeightInfo for TestWeightInfo {
 	fn enter_variable_disputes(v: u32) -> Weight {
 		// MAX Block Weight should fit 4 disputes
-		Weight::from_ref_time(80_000 * v as u64 + 80_000)
+		Weight::from_parts(80_000 * v as u64 + 80_000, 0)
 	}
 	fn enter_bitfields() -> Weight {
 		// MAX Block Weight should fit 4 backed candidates
-		Weight::from_ref_time(40_000u64)
+		Weight::from_parts(40_000u64, 0)
 	}
 	fn enter_backed_candidates_variable(v: u32) -> Weight {
 		// MAX Block Weight should fit 4 backed candidates
-		Weight::from_ref_time(40_000 * v as u64 + 40_000)
+		Weight::from_parts(40_000 * v as u64 + 40_000, 0)
 	}
 	fn enter_backed_candidate_code_upgrade() -> Weight {
 		Weight::zero()

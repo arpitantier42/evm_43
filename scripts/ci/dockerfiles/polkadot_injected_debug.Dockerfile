@@ -8,11 +8,11 @@ ARG IMAGE_NAME
 LABEL io.parity.image.authors="devops-team@parity.io" \
 	io.parity.image.vendor="Parity Technologies" \
 	io.parity.image.title="${IMAGE_NAME}" \
-	io.parity.image.description="vine: a platform for web3" \
-	io.parity.image.source="https://github.com/paritytech/vine/blob/${VCS_REF}/scripts/ci/dockerfiles/peer_injected_debug.Dockerfile" \
+	io.parity.image.description="Polkadot: a platform for web3" \
+	io.parity.image.source="https://github.com/paritytech/polkadot/blob/${VCS_REF}/scripts/ci/dockerfiles/polkadot_injected_debug.Dockerfile" \
 	io.parity.image.revision="${VCS_REF}" \
 	io.parity.image.created="${BUILD_DATE}" \
-	io.parity.image.documentation="https://github.com/paritytech/vine/"
+	io.parity.image.documentation="https://github.com/paritytech/polkadot/"
 
 # show backtraces
 ENV RUST_BACKTRACE 1
@@ -26,21 +26,21 @@ RUN apt-get update && \
 	apt-get autoremove -y && \
 	apt-get clean && \
 	find /var/lib/apt/lists/ -type f -not -name lock -delete; \
-# add user and link ~/.local/share/vine to /data
-	useradd -m -u 1000 -U -s /bin/sh -d /vine vine && \
-	mkdir -p /data /vine/.local/share && \
-	chown -R vine:vine /data && \
-	ln -s /data /vine/.local/share/vine
+# add user and link ~/.local/share/polkadot to /data
+	useradd -m -u 1000 -U -s /bin/sh -d /polkadot polkadot && \
+	mkdir -p /data /polkadot/.local/share && \
+	chown -R polkadot:polkadot /data && \
+	ln -s /data /polkadot/.local/share/polkadot
 
-# add vine binary to docker image
-COPY ./vine /usr/local/bin
+# add polkadot binary to docker image
+COPY ./polkadot /usr/local/bin
 
-USER vine
+USER polkadot
 
 # check if executable works in this container
-RUN /usr/local/bin/vine --version
+RUN /usr/local/bin/polkadot --version
 
 EXPOSE 30333 9933 9944
-VOLUME ["/vine"]
+VOLUME ["/polkadot"]
 
-ENTRYPOINT ["/usr/local/bin/vine"]
+ENTRYPOINT ["/usr/local/bin/polkadot"]

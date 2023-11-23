@@ -1,22 +1,22 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 use futures::{executor, stream::BoxStream};
-use vine_node_subsystem_util::TimeoutExt;
+use polkadot_node_subsystem_util::TimeoutExt;
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
@@ -24,30 +24,30 @@ use std::collections::HashSet;
 
 use sc_network::{Event as NetworkEvent, IfDisconnected, ProtocolName};
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	peer_set::PeerSetProtocolNames,
 	request_response::{outgoing::Requests, ReqProtocolNames},
 	ObservedRole, Versioned,
 };
-use vine_node_subsystem::{FromOrchestra, OverseerSignal};
-use vine_node_subsystem_test_helpers::TestSubsystemContextHandle;
-use vine_node_subsystem_util::metered;
-use vine_primitives::v2::{AuthorityDiscoveryId, Hash};
-use vine_primitives_test_helpers::dummy_collator_signature;
+use polkadot_node_subsystem::{FromOrchestra, OverseerSignal};
+use polkadot_node_subsystem_test_helpers::TestSubsystemContextHandle;
+use polkadot_node_subsystem_util::metered;
+use polkadot_primitives::{AuthorityDiscoveryId, Hash};
+use polkadot_primitives_test_helpers::dummy_collator_signature;
 use sc_network::Multiaddr;
 use sp_keyring::Sr25519Keyring;
 
-const TIMEOUT: std::time::Duration = vine_node_subsystem_test_helpers::TestSubsystemContextHandle::<NetworkBridgeTxMessage>::TIMEOUT;
+const TIMEOUT: std::time::Duration = polkadot_node_subsystem_test_helpers::TestSubsystemContextHandle::<NetworkBridgeTxMessage>::TIMEOUT;
 
 use crate::{network::Network, validator_discovery::AuthorityDiscovery, Rep};
 
 #[derive(Debug, PartialEq)]
 pub enum NetworkAction {
-	/// Note a change in reputation for a vine.
+	/// Note a change in reputation for a peer.
 	ReputationChange(PeerId, Rep),
-	/// Disconnect a vine from the given vine-set.
+	/// Disconnect a peer from the given peer-set.
 	DisconnectPeer(PeerId, PeerSet),
-	/// Write a notification to a given vine on the given vine-set.
+	/// Write a notification to a given peer on the given peer-set.
 	WriteNotification(PeerId, PeerSet, Vec<u8>),
 }
 
@@ -167,12 +167,13 @@ impl TestNetworkHandle {
 		self.action_rx.next().await.expect("subsystem concluded early")
 	}
 
-	async fn connect_peer(&mut self, vine: PeerId, peer_set: PeerSet, role: ObservedRole) {
+	async fn connect_peer(&mut self, peer: PeerId, peer_set: PeerSet, role: ObservedRole) {
 		self.send_network_event(NetworkEvent::NotificationStreamOpened {
-			remote: vine,
+			remote: peer,
 			protocol: self.peerset_protocol_names.get_main_name(peer_set),
 			negotiated_fallback: None,
 			role: role.into(),
+			received_handshake: vec![],
 		})
 		.await;
 	}
@@ -199,7 +200,7 @@ fn test_harness<T: Future<Output = VirtualOverseer>>(test: impl FnOnce(TestHarne
 	let (network, network_handle, discovery) = new_test_network(peerset_protocol_names.clone());
 
 	let (context, virtual_overseer) =
-		vine_node_subsystem_test_helpers::make_subsystem_context(pool);
+		polkadot_node_subsystem_test_helpers::make_subsystem_context(pool);
 
 	let bridge_out = NetworkBridgeTx::new(
 		network,
@@ -232,10 +233,10 @@ fn send_messages_to_peers() {
 	test_harness(|test_harness| async move {
 		let TestHarness { mut network_handle, mut virtual_overseer } = test_harness;
 
-		let vine = PeerId::random();
+		let peer = PeerId::random();
 
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Validation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Validation, ObservedRole::Full)
 			.timeout(TIMEOUT)
 			.await
 			.expect("Timeout does not occur");
@@ -244,7 +245,7 @@ fn send_messages_to_peers() {
 		// so the single item sink has to be free explicitly
 
 		network_handle
-			.connect_peer(vine.clone(), PeerSet::Collation, ObservedRole::Full)
+			.connect_peer(peer.clone(), PeerSet::Collation, ObservedRole::Full)
 			.timeout(TIMEOUT)
 			.await
 			.expect("Timeout does not occur");
@@ -262,7 +263,7 @@ fn send_messages_to_peers() {
 			virtual_overseer
 				.send(FromOrchestra::Communication {
 					msg: NetworkBridgeTxMessage::SendValidationMessage(
-						vec![vine.clone()],
+						vec![peer.clone()],
 						Versioned::V1(message_v1.clone()),
 					),
 				})
@@ -277,7 +278,7 @@ fn send_messages_to_peers() {
 					.await
 					.expect("Timeout does not occur"),
 				NetworkAction::WriteNotification(
-					vine.clone(),
+					peer.clone(),
 					PeerSet::Validation,
 					WireMessage::ProtocolMessage(message_v1).encode(),
 				)
@@ -299,7 +300,7 @@ fn send_messages_to_peers() {
 			virtual_overseer
 				.send(FromOrchestra::Communication {
 					msg: NetworkBridgeTxMessage::SendCollationMessage(
-						vec![vine.clone()],
+						vec![peer.clone()],
 						Versioned::V1(message_v1.clone()),
 					),
 				})
@@ -312,7 +313,7 @@ fn send_messages_to_peers() {
 					.await
 					.expect("Timeout does not occur"),
 				NetworkAction::WriteNotification(
-					vine.clone(),
+					peer.clone(),
 					PeerSet::Collation,
 					WireMessage::ProtocolMessage(message_v1).encode(),
 				)

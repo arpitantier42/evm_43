@@ -1,24 +1,25 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 use crate::mock::{
 	new_test_ext, Configuration, Dmp, Initializer, MockGenesisConfig, Paras, SessionInfo, System,
+	Test,
 };
-use primitives::v2::{HeadData, Id as ParaId};
+use primitives::{HeadData, Id as ParaId};
 use test_helpers::dummy_validation_code;
 
 use crate::paras::ParaKind;
@@ -32,7 +33,7 @@ fn session_0_is_instantly_applied() {
 	new_test_ext(Default::default()).execute_with(|| {
 		Initializer::on_new_session(false, 0, Vec::new().into_iter(), Some(Vec::new().into_iter()));
 
-		let v = <Initializer as Store>::BufferedSessionChanges::get();
+		let v = BufferedSessionChanges::<Test>::get();
 		assert!(v.is_empty());
 
 		assert_eq!(SessionInfo::earliest_stored_session(), 0);
@@ -48,7 +49,7 @@ fn session_change_before_initialize_is_still_buffered_after() {
 		let now = System::block_number();
 		Initializer::on_initialize(now);
 
-		let v = <Initializer as Store>::BufferedSessionChanges::get();
+		let v = BufferedSessionChanges::<Test>::get();
 		assert_eq!(v.len(), 1);
 	});
 }
@@ -61,7 +62,7 @@ fn session_change_applied_on_finalize() {
 
 		Initializer::on_finalize(1);
 
-		assert!(<Initializer as Store>::BufferedSessionChanges::get().is_empty());
+		assert!(BufferedSessionChanges::<Test>::get().is_empty());
 	});
 }
 
@@ -70,7 +71,7 @@ fn sets_flag_on_initialize() {
 	new_test_ext(Default::default()).execute_with(|| {
 		Initializer::on_initialize(1);
 
-		assert!(<Initializer as Store>::HasInitialized::get().is_some());
+		assert!(HasInitialized::<Test>::get().is_some());
 	})
 }
 
@@ -80,7 +81,7 @@ fn clears_flag_on_finalize() {
 		Initializer::on_initialize(1);
 		Initializer::on_finalize(1);
 
-		assert!(<Initializer as Store>::HasInitialized::get().is_none());
+		assert!(HasInitialized::<Test>::get().is_none());
 	})
 }
 

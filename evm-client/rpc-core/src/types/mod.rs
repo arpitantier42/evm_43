@@ -31,6 +31,7 @@ mod receipt;
 mod sync;
 mod transaction;
 mod transaction_request;
+mod txpool;
 mod work;
 
 pub mod pubsub;
@@ -40,7 +41,7 @@ pub use self::{
 	block::{Block, BlockTransactions, Header, Rich, RichBlock, RichHeader},
 	block_number::BlockNumber,
 	bytes::Bytes,
-	call_request::CallRequest,
+	call_request::{CallRequest, CallStateOverride},
 	fee::{FeeHistory, FeeHistoryCache, FeeHistoryCacheItem, FeeHistoryCacheLimit},
 	filter::{
 		Filter, FilterAddress, FilterChanges, FilterPool, FilterPoolItem, FilterType,
@@ -55,5 +56,6 @@ pub use self::{
 	},
 	transaction::{LocalTransactionStatus, RichRawTransaction, Transaction},
 	transaction_request::{TransactionMessage, TransactionRequest},
+	txpool::{Get, Summary, TransactionMap, TxPoolResult, TxPoolTransaction},
 	work::Work,
 };

@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Implements a `AvailabilityStoreSubsystem`.
 
@@ -29,17 +29,18 @@ use std::{
 use futures::{channel::oneshot, future, select, FutureExt};
 use futures_timer::Delay;
 use parity_scale_codec::{Decode, Encode, Error as CodecError, Input};
-use vine_node_subsystem_util::database::{DBTransaction, Database};
+use polkadot_node_subsystem_util::database::{DBTransaction, Database};
+use sp_consensus::SyncOracle;
 
 use bitvec::{order::Lsb0 as BitOrderLsb0, vec::BitVec};
-use vine_node_primitives::{AvailableData, ErasureChunk};
-use vine_node_subsystem::{
+use polkadot_node_primitives::{AvailableData, ErasureChunk};
+use polkadot_node_subsystem::{
 	errors::{ChainApiError, RuntimeApiError},
 	messages::{AvailabilityStoreMessage, ChainApiMessage},
 	overseer, ActiveLeavesUpdate, FromOrchestra, OverseerSignal, SpawnedSubsystem, SubsystemError,
 };
-use vine_node_subsystem_util as util;
-use vine_primitives::v2::{
+use polkadot_node_subsystem_util as util;
+use polkadot_primitives::{
 	BlockNumber, CandidateEvent, CandidateHash, CandidateReceipt, Hash, Header, ValidatorIndex,
 };
 
@@ -451,16 +452,23 @@ pub struct AvailabilityStoreSubsystem {
 	finalized_number: Option<BlockNumber>,
 	metrics: Metrics,
 	clock: Box<dyn Clock>,
+	sync_oracle: Box<dyn SyncOracle + Send + Sync>,
 }
 
 impl AvailabilityStoreSubsystem {
 	/// Create a new `AvailabilityStoreSubsystem` with a given config on disk.
-	pub fn new(db: Arc<dyn Database>, config: Config, metrics: Metrics) -> Self {
+	pub fn new(
+		db: Arc<dyn Database>,
+		config: Config,
+		sync_oracle: Box<dyn SyncOracle + Send + Sync>,
+		metrics: Metrics,
+	) -> Self {
 		Self::with_pruning_config_and_clock(
 			db,
 			config,
 			PruningConfig::default(),
 			Box::new(SystemClock),
+			sync_oracle,
 			metrics,
 		)
 	}
@@ -471,6 +479,7 @@ impl AvailabilityStoreSubsystem {
 		config: Config,
 		pruning_config: PruningConfig,
 		clock: Box<dyn Clock>,
+		sync_oracle: Box<dyn SyncOracle + Send + Sync>,
 		metrics: Metrics,
 	) -> Self {
 		Self {
@@ -480,6 +489,7 @@ impl AvailabilityStoreSubsystem {
 			metrics,
 			clock,
 			known_blocks: KnownUnfinalizedBlocks::default(),
+			sync_oracle,
 			finalized_number: None,
 		}
 	}
@@ -570,6 +580,19 @@ async fn run_iteration<Context>(
 				FromOrchestra::Signal(OverseerSignal::BlockFinalized(hash, number)) => {
 					let _timer = subsystem.metrics.time_process_block_finalized();
 
+					if !subsystem.known_blocks.is_known(&hash) {
+						// If we haven't processed this block yet,
+						// make sure we write the metadata about the
+						// candidates backed in this finalized block.
+						// Otherwise, we won't be able to store our chunk
+						// for these candidates.
+						if !subsystem.sync_oracle.is_major_syncing() {
+							// If we're major syncing, processing finalized
+							// blocks might take quite a very long time
+							// and make the subsystem unresponsive.
+							process_block_activated(ctx, subsystem, hash).await?;
+						}
+					}
 					subsystem.finalized_number = Some(number);
 					subsystem.known_blocks.prune_finalized(number);
 					process_block_finalized(
@@ -1028,6 +1051,25 @@ fn process_message(
 			let _timer = subsystem.metrics.time_get_chunk();
 			let _ =
 				tx.send(load_chunk(&subsystem.db, &subsystem.config, &candidate, validator_index)?);
+		},
+		AvailabilityStoreMessage::QueryChunkSize(candidate, tx) => {
+			let meta = load_meta(&subsystem.db, &subsystem.config, &candidate)?;
+
+			let validator_index = meta.map_or(None, |meta| meta.chunks_stored.first_one());
+
+			let maybe_chunk_size = if let Some(validator_index) = validator_index {
+				load_chunk(
+					&subsystem.db,
+					&subsystem.config,
+					&candidate,
+					ValidatorIndex(validator_index as u32),
+				)?
+				.map(|erasure_chunk| erasure_chunk.chunk.len())
+			} else {
+				None
+			};
+
+			let _ = tx.send(maybe_chunk_size);
 		},
 		AvailabilityStoreMessage::QueryAllChunks(candidate, tx) => {
 			match load_meta(&subsystem.db, &subsystem.config, &candidate)? {

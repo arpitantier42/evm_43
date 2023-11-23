@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{sync::Arc, time::Duration};
 
@@ -23,8 +23,8 @@ use parity_scale_codec::Encode;
 use sp_core::testing::TaskExecutor;
 
 use ::test_helpers::{dummy_collator, dummy_collator_signature, dummy_hash};
-use vine_node_primitives::DISPUTE_CANDIDATE_LIFETIME_AFTER_FINALIZATION;
-use vine_node_subsystem::{
+use polkadot_node_primitives::DISPUTE_CANDIDATE_LIFETIME_AFTER_FINALIZATION;
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{
 		AllMessages, ChainApiMessage, DisputeCoordinatorMessage, RuntimeApiMessage,
@@ -32,11 +32,11 @@ use vine_node_subsystem::{
 	},
 	ActivatedLeaf, ActiveLeavesUpdate, LeafStatus, SpawnGlue,
 };
-use vine_node_subsystem_test_helpers::{
+use polkadot_node_subsystem_test_helpers::{
 	make_subsystem_context, TestSubsystemContext, TestSubsystemContextHandle, TestSubsystemSender,
 };
-use vine_node_subsystem_util::{reexports::SubsystemContext, TimeoutExt};
-use vine_primitives::v2::{
+use polkadot_node_subsystem_util::{reexports::SubsystemContext, TimeoutExt};
+use polkadot_primitives::{
 	BlakeTwo256, BlockNumber, CandidateDescriptor, CandidateEvent, CandidateReceipt, CoreIndex,
 	GroupIndex, Hash, HashT, HeadData, Id as ParaId,
 };
@@ -410,7 +410,8 @@ fn scraper_requests_candidates_of_non_finalized_ancestors() {
 			&mut virtual_overseer,
 			&chain,
 			finalized_block_number,
-			BLOCKS_TO_SKIP - finalized_block_number as usize, // Expect the provider not to go past finalized block.
+			BLOCKS_TO_SKIP -
+				(finalized_block_number - DISPUTE_CANDIDATE_LIFETIME_AFTER_FINALIZATION) as usize, // Expect the provider not to go past finalized block.
 			get_backed_and_included_candidate_events,
 		);
 		join(process_active_leaves_update(ctx.sender(), &mut ordering, next_update), overseer_fut)
@@ -576,5 +577,75 @@ fn scraper_handles_the_same_candidate_incuded_in_two_different_block_heights() {
 
 		assert!(!scraper.is_candidate_backed(&magic_candidate.hash()));
 		assert!(!scraper.is_candidate_included(&magic_candidate.hash()));
+	});
+}
+
+#[test]
+fn inclusions_per_candidate_properly_adds_and_prunes() {
+	const TEST_TARGET_BLOCK_NUMBER: BlockNumber = 2;
+	const TEST_TARGET_BLOCK_NUMBER_2: BlockNumber = 3;
+
+	// How many blocks should we skip before sending a leaf update.
+	const BLOCKS_TO_SKIP: usize = 4;
+
+	futures::executor::block_on(async {
+		let (state, mut virtual_overseer) = TestState::new().await;
+
+		let TestState { mut chain, mut scraper, mut ctx } = state;
+
+		// 1 because `TestState` starts at leaf 1.
+		let next_update = (1..BLOCKS_TO_SKIP).map(|_| next_leaf(&mut chain)).last().unwrap();
+
+		let mut finalized_block_number = 1;
+		let expected_ancestry_len = BLOCKS_TO_SKIP - finalized_block_number as usize;
+		let overseer_fut = overseer_process_active_leaves_update(
+			&mut virtual_overseer,
+			&chain,
+			finalized_block_number,
+			expected_ancestry_len,
+			|block_num| {
+				if block_num == TEST_TARGET_BLOCK_NUMBER || block_num == TEST_TARGET_BLOCK_NUMBER_2
+				{
+					get_backed_and_included_candidate_events(TEST_TARGET_BLOCK_NUMBER)
+				} else {
+					vec![]
+				}
+			},
+		);
+		join(process_active_leaves_update(ctx.sender(), &mut scraper, next_update), overseer_fut)
+			.await;
+
+		let candidate = make_candidate_receipt(get_block_number_hash(TEST_TARGET_BLOCK_NUMBER));
+
+		// We included the same candidate at two different block heights. So both blocks in which
+		// the candidate is included are recorded
+		assert_eq!(
+			scraper.get_blocks_including_candidate(&candidate.hash()),
+			Vec::from([
+				(TEST_TARGET_BLOCK_NUMBER, get_block_number_hash(TEST_TARGET_BLOCK_NUMBER)),
+				(TEST_TARGET_BLOCK_NUMBER_2, get_block_number_hash(TEST_TARGET_BLOCK_NUMBER_2))
+			])
+		);
+
+		// After `DISPUTE_CANDIDATE_LIFETIME_AFTER_FINALIZATION` blocks the earlier inclusion should be removed
+		finalized_block_number =
+			TEST_TARGET_BLOCK_NUMBER + DISPUTE_CANDIDATE_LIFETIME_AFTER_FINALIZATION;
+		process_finalized_block(&mut scraper, &finalized_block_number);
+
+		// The later inclusion should still be present, as we haven't exceeded its lifetime
+		assert_eq!(
+			scraper.get_blocks_including_candidate(&candidate.hash()),
+			Vec::from([(
+				TEST_TARGET_BLOCK_NUMBER_2,
+				get_block_number_hash(TEST_TARGET_BLOCK_NUMBER_2)
+			)])
+		);
+
+		finalized_block_number =
+			TEST_TARGET_BLOCK_NUMBER_2 + DISPUTE_CANDIDATE_LIFETIME_AFTER_FINALIZATION;
+		process_finalized_block(&mut scraper, &finalized_block_number);
+
+		// Now both inclusions have exceeded their lifetimes after finalization and should be purged
+		assert!(scraper.get_blocks_including_candidate(&candidate.hash()).len() == 0);
 	});
 }

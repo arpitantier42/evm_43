@@ -7,7 +7,7 @@ title: Polkadot {{ env.VERSION }} Release checklist
 
 This is the release checklist for Polkadot {{ env.VERSION }}. **All** following
 checks should be completed before publishing a new release of the
-Polkadot// runtime or client. The current release candidate can be
+Polkadot/Kusama/Westend/Rococo runtime or client. The current release candidate can be
 checked out with `git checkout release-{{ env.VERSION }}`
 
 ### Runtime Releases
@@ -37,7 +37,7 @@ candidate branch or started an additional release candidate branch (rc-2, rc-3, 
 - [ ] Verify [Polkadot JS API](https://github.com/paritytech/polkadot/blob/master/doc/release-checklist.md#polkadot-js) are up to date with the latest
     runtime changes.
 - [ ] Check with the Signer's team to make sure metadata update QR are lined up
-
+- [ ] Push runtime upgrade to Westend and verify network stability.
 
 ### All Releases
 

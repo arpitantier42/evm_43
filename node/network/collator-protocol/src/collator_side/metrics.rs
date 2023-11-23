@@ -1,20 +1,20 @@
-// Copyright 2017-2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use vine_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_node_subsystem_util::metrics::{self, prometheus};
 
 #[derive(Clone, Default)]
 pub struct Metrics(Option<MetricsInner>);
@@ -70,21 +70,21 @@ impl metrics::Metrics for Metrics {
 		let metrics = MetricsInner {
 			advertisements_made: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_collation_advertisements_made_total",
+					"polkadot_parachain_collation_advertisements_made_total",
 					"A number of collation advertisements sent to validators.",
 				)?,
 				registry,
 			)?,
 			collations_send_requested: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_collations_sent_requested_total",
+					"polkadot_parachain_collations_sent_requested_total",
 					"A number of collations requested to be sent to validators.",
 				)?,
 				registry,
 			)?,
 			collations_sent: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_collations_sent_total",
+					"polkadot_parachain_collations_sent_total",
 					"A number of collations sent to validators.",
 				)?,
 				registry,
@@ -92,7 +92,7 @@ impl metrics::Metrics for Metrics {
 			process_msg: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_collator_protocol_collator_process_msg",
+						"polkadot_parachain_collator_protocol_collator_process_msg",
 						"Time spent within `collator_protocol_collator::process_msg`",
 					)
 					.buckets(vec![
@@ -105,7 +105,7 @@ impl metrics::Metrics for Metrics {
 			collation_distribution_time: prometheus::register(
 				prometheus::HistogramVec::new(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_collator_protocol_collator_distribution_time",
+						"polkadot_parachain_collator_protocol_collator_distribution_time",
 						"Time spent within `collator_protocol_collator::distribute_collation`",
 					)
 					.buckets(vec![

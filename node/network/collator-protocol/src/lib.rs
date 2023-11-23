@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! The Collator Protocol allows collators and validators talk to each other.
 //! This subsystem implements both sides of the collator protocol.
@@ -28,15 +28,15 @@ use futures::{
 	FutureExt, TryFutureExt,
 };
 
-use sp_keystore::SyncCryptoStorePtr;
+use sp_keystore::KeystorePtr;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	request_response::{v1 as request_v1, IncomingRequestReceiver},
 	PeerId, UnifiedReputationChange as Rep,
 };
-use vine_primitives::v2::CollatorPair;
+use polkadot_primitives::CollatorPair;
 
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	errors::SubsystemError, messages::NetworkBridgeTxMessage, overseer, SpawnedSubsystem,
 };
 
@@ -70,7 +70,7 @@ pub enum ProtocolSide {
 	/// Validators operate on the relay chain.
 	Validator {
 		/// The keystore holding validator keys.
-		keystore: SyncCryptoStorePtr,
+		keystore: KeystorePtr,
 		/// An eviction policy for inactive peers or validators.
 		eviction_policy: CollatorEvictionPolicy,
 		/// Prometheus metrics for validators.
@@ -122,20 +122,20 @@ impl<Context> CollatorProtocolSubsystem {
 	}
 }
 
-/// Modify the reputation of a vine based on its behavior.
+/// Modify the reputation of a peer based on its behavior.
 async fn modify_reputation(
 	sender: &mut impl overseer::CollatorProtocolSenderTrait,
-	vine: PeerId,
+	peer: PeerId,
 	rep: Rep,
 ) {
 	gum::trace!(
 		target: LOG_TARGET,
 		rep = ?rep,
-		peer_id = %vine,
-		"reputation change for vine",
+		peer_id = %peer,
+		"reputation change for peer",
 	);
 
-	sender.send_message(NetworkBridgeTxMessage::ReportPeer(vine, rep)).await;
+	sender.send_message(NetworkBridgeTxMessage::ReportPeer(peer, rep)).await;
 }
 
 /// Wait until tick and return the timestamp for the following one.

@@ -1,44 +1,47 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-//! vine test service only.
+//! Polkadot test service only.
 
 #![warn(missing_docs)]
 
 pub mod chain_spec;
 
 pub use chain_spec::*;
-use futures::future::Future;
-use vine_node_primitives::{CollationGenerationConfig, CollatorFn};
-use vine_node_subsystem::messages::{CollationGenerationMessage, CollatorProtocolMessage};
-use vine_overseer::Handle;
-use vine_primitives::v2::{Balance, CollatorPair, HeadData, Id as ParaId, ValidationCode};
-use vine_runtime_common::BlockHashCount;
-use vine_runtime_parachains::paras::{ParaGenesisArgs, ParaKind};
-use vine_service::{
+use futures::{future::Future, stream::StreamExt};
+use polkadot_node_primitives::{CollationGenerationConfig, CollatorFn};
+use polkadot_node_subsystem::messages::{CollationGenerationMessage, CollatorProtocolMessage};
+use polkadot_overseer::Handle;
+use polkadot_primitives::{Balance, CollatorPair, HeadData, Id as ParaId, ValidationCode};
+use polkadot_runtime_common::BlockHashCount;
+use polkadot_runtime_parachains::paras::{ParaGenesisArgs, ParaKind};
+use polkadot_service::{
 	ClientHandle, Error, ExecuteWithClient, FullClient, IsCollator, NewFull, PrometheusConfig,
 };
-use vine_test_runtime::{
-	ParasSudoWrapperCall, Runtime, SignedExtra, SignedPayload, SudoCall, UncheckedExtrinsic,
-	VERSION,
+use polkadot_test_runtime::{
+	ParasCall, ParasSudoWrapperCall, Runtime, SignedExtra, SignedPayload, SudoCall,
+	UncheckedExtrinsic, VERSION,
 };
+
 use sc_chain_spec::ChainSpec;
-use sc_client_api::execution_extensions::ExecutionStrategies;
-use sc_network::{config::NetworkConfiguration, multiaddr};
-use sc_network_common::{config::TransportConfig, service::NetworkStateInfo};
+use sc_client_api::{execution_extensions::ExecutionStrategies, BlockchainEvents};
+use sc_network::{
+	config::{NetworkConfiguration, TransportConfig},
+	multiaddr, NetworkStateInfo,
+};
 use sc_service::{
 	config::{
 		DatabaseSource, KeystoreConfig, MultiaddrWithPeerId, WasmExecutionMethod,
@@ -52,6 +55,7 @@ use sp_keyring::Sr25519Keyring;
 use sp_runtime::{codec::Encode, generic, traits::IdentifyAccount, MultiSigner};
 use sp_state_machine::BasicExternalities;
 use std::{
+	collections::HashSet,
 	net::{Ipv4Addr, SocketAddr},
 	path::PathBuf,
 	sync::Arc,
@@ -59,27 +63,26 @@ use std::{
 use substrate_test_client::{
 	BlockchainEventsExt, RpcHandlersExt, RpcTransactionError, RpcTransactionOutput,
 };
-
-/// Declare an instance of the native executor named `VineTestExecutorDispatch`. Include the wasm binary as the
+/// Declare an instance of the native executor named `PolkadotTestExecutorDispatch`. Include the wasm binary as the
 /// equivalent wasm code.
-pub struct VineTestExecutorDispatch;
+pub struct PolkadotTestExecutorDispatch;
 
-impl sc_executor::NativeExecutionDispatch for VineTestExecutorDispatch {
+impl sc_executor::NativeExecutionDispatch for PolkadotTestExecutorDispatch {
 	type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
 
 	fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-		vine_test_runtime::api::dispatch(method, data)
+		polkadot_test_runtime::api::dispatch(method, data)
 	}
 
 	fn native_version() -> sc_executor::NativeVersion {
-		vine_test_runtime::native_version()
+		polkadot_test_runtime::native_version()
 	}
 }
 
 /// The client type being used by the test service.
-pub type Client = FullClient<vine_test_runtime::RuntimeApi, VineTestExecutorDispatch>;
+pub type Client = FullClient<polkadot_test_runtime::RuntimeApi, PolkadotTestExecutorDispatch>;
 
-pub use vine_service::FullBackend;
+pub use polkadot_service::FullBackend;
 
 /// Create a new full node.
 #[sc_tracing::logging::prefix_logs_with(config.network.node_name.as_str())]
@@ -88,7 +91,7 @@ pub fn new_full(
 	is_collator: IsCollator,
 	worker_program_path: Option<PathBuf>,
 ) -> Result<NewFull<Arc<Client>>, Error> {
-	vine_service::new_full::<vine_test_runtime::RuntimeApi, VineTestExecutorDispatch, _>(
+	polkadot_service::new_full::<polkadot_test_runtime::RuntimeApi, PolkadotTestExecutorDispatch, _>(
 		config,
 		is_collator,
 		None,
@@ -97,7 +100,7 @@ pub fn new_full(
 		None,
 		worker_program_path,
 		false,
-		vine_service::RealOverseerGen,
+		polkadot_service::RealOverseerGen,
 		None,
 		None,
 		None,
@@ -109,7 +112,7 @@ pub struct TestClient(pub Arc<Client>);
 
 impl ClientHandle for TestClient {
 	fn execute_with<T: ExecuteWithClient>(&self, t: T) -> T::Output {
-		T::execute_with_client::<_, _, vine_service::FullBackend>(t, self.0.clone())
+		T::execute_with_client::<_, _, polkadot_service::FullBackend>(t, self.0.clone())
 	}
 }
 
@@ -121,7 +124,7 @@ pub fn test_prometheus_config(port: u16) -> PrometheusConfig {
 	)
 }
 
-/// Create a vine `Configuration`.
+/// Create a Polkadot `Configuration`.
 ///
 /// By default an in-memory socket will be used, therefore you need to provide boot
 /// nodes if you want the future node to be connected to other nodes.
@@ -139,7 +142,7 @@ pub fn node_config(
 	let root = base_path.path().join(key.to_string());
 	let role = if is_validator { Role::Authority } else { Role::Full };
 	let key_seed = key.to_seed();
-	let mut spec = vine_local_testnet_config();
+	let mut spec = polkadot_local_testnet_config();
 	let mut storage = spec.as_storage_builder().build_storage().expect("could not build storage");
 
 	BasicExternalities::execute_with_storage(&mut storage, storage_update_func);
@@ -164,14 +167,13 @@ pub fn node_config(
 	network_config.transport = TransportConfig::MemoryOnly;
 
 	Configuration {
-		impl_name: "vine-test-node".to_string(),
+		impl_name: "polkadot-test-node".to_string(),
 		impl_version: "0.1".to_string(),
 		role,
 		tokio_handle,
 		transaction_pool: Default::default(),
 		network: network_config,
 		keystore: KeystoreConfig::InMemory,
-		keystore_remote: Default::default(),
 		database: DatabaseSource::RocksDb { path: root.join("db"), cache_size: 128 },
 		trie_cache_maximum_size: Some(64 * 1024 * 1024),
 		state_pruning: Default::default(),
@@ -189,18 +191,15 @@ pub fn node_config(
 			offchain_worker: sc_client_api::ExecutionStrategy::NativeWhenPossible,
 			other: sc_client_api::ExecutionStrategy::NativeWhenPossible,
 		},
-		rpc_http: None,
-		rpc_ws: None,
-		rpc_ipc: None,
-		rpc_max_payload: None,
-		rpc_max_request_size: None,
-		rpc_max_response_size: None,
-		rpc_ws_max_connections: None,
+		rpc_addr: Default::default(),
+		rpc_max_request_size: Default::default(),
+		rpc_max_response_size: Default::default(),
+		rpc_max_connections: Default::default(),
 		rpc_cors: None,
 		rpc_methods: Default::default(),
 		rpc_id_provider: None,
-		rpc_max_subs_per_conn: None,
-		ws_max_out_buffer_capacity: None,
+		rpc_max_subs_per_conn: Default::default(),
+		rpc_port: 9944,
 		prometheus_config: None,
 		telemetry_endpoints: None,
 		default_heap_pages: None,
@@ -213,7 +212,8 @@ pub fn node_config(
 		max_runtime_instances: 8,
 		runtime_cache_size: 2,
 		announce_block: true,
-		base_path: Some(base_path),
+		data_path: root,
+		base_path,
 		informant_output_format: Default::default(),
 	}
 }
@@ -222,17 +222,17 @@ pub fn node_config(
 pub fn run_validator_node(
 	config: Configuration,
 	worker_program_path: Option<PathBuf>,
-) -> VineTestNode {
+) -> PolkadotTestNode {
 	let multiaddr = config.network.listen_addresses[0].clone();
 	let NewFull { task_manager, client, network, rpc_handlers, overseer_handle, .. } =
 		new_full(config, IsCollator::No, worker_program_path)
-			.expect("could not create vine test service");
+			.expect("could not create Polkadot test service");
 
 	let overseer_handle = overseer_handle.expect("test node must have an overseer handle");
 	let peer_id = network.local_peer_id().clone();
 	let addr = MultiaddrWithPeerId { multiaddr, peer_id };
 
-	VineTestNode { task_manager, client, overseer_handle, addr, rpc_handlers }
+	PolkadotTestNode { task_manager, client, overseer_handle, addr, rpc_handlers }
 }
 
 /// Run a test collator node that uses the test runtime.
@@ -246,29 +246,29 @@ pub fn run_validator_node(
 /// # Note
 ///
 /// The collator functionality still needs to be registered at the node! This can be done using
-/// [`VineTestNode::register_collator`].
+/// [`PolkadotTestNode::register_collator`].
 pub fn run_collator_node(
 	tokio_handle: tokio::runtime::Handle,
 	key: Sr25519Keyring,
 	storage_update_func: impl Fn(),
 	boot_nodes: Vec<MultiaddrWithPeerId>,
 	collator_pair: CollatorPair,
-) -> VineTestNode {
+) -> PolkadotTestNode {
 	let config = node_config(storage_update_func, tokio_handle, key, boot_nodes, false);
 	let multiaddr = config.network.listen_addresses[0].clone();
 	let NewFull { task_manager, client, network, rpc_handlers, overseer_handle, .. } =
 		new_full(config, IsCollator::Yes(collator_pair), None)
-			.expect("could not create vine test service");
+			.expect("could not create Polkadot test service");
 
 	let overseer_handle = overseer_handle.expect("test node must have an overseer handle");
 	let peer_id = network.local_peer_id().clone();
 	let addr = MultiaddrWithPeerId { multiaddr, peer_id };
 
-	VineTestNode { task_manager, client, overseer_handle, addr, rpc_handlers }
+	PolkadotTestNode { task_manager, client, overseer_handle, addr, rpc_handlers }
 }
 
-/// A vine test node instance used for testing.
-pub struct VineTestNode {
+/// A Polkadot test node instance used for testing.
+pub struct PolkadotTestNode {
 	/// `TaskManager`'s instance.
 	pub task_manager: TaskManager,
 	/// Client's instance.
@@ -281,11 +281,24 @@ pub struct VineTestNode {
 	pub rpc_handlers: RpcHandlers,
 }
 
-impl VineTestNode {
+impl PolkadotTestNode {
+	/// Send a sudo call to this node.
+	async fn send_sudo(
+		&self,
+		call: impl Into<polkadot_test_runtime::RuntimeCall>,
+		caller: Sr25519Keyring,
+		nonce: u32,
+	) -> Result<(), RpcTransactionError> {
+		let sudo = SudoCall::sudo { call: Box::new(call.into()) };
+
+		let extrinsic = construct_extrinsic(&*self.client, sudo, caller, nonce);
+		self.rpc_handlers.send_transaction(extrinsic.into()).await.map(drop)
+	}
+
 	/// Send an extrinsic to this node.
 	pub async fn send_extrinsic(
 		&self,
-		function: impl Into<vine_test_runtime::RuntimeCall>,
+		function: impl Into<polkadot_test_runtime::RuntimeCall>,
 		caller: Sr25519Keyring,
 	) -> Result<RpcTransactionOutput, RpcTransactionError> {
 		let extrinsic = construct_extrinsic(&*self.client, function, caller, 0);
@@ -300,24 +313,41 @@ impl VineTestNode {
 		validation_code: impl Into<ValidationCode>,
 		genesis_head: impl Into<HeadData>,
 	) -> Result<(), RpcTransactionError> {
+		let validation_code: ValidationCode = validation_code.into();
 		let call = ParasSudoWrapperCall::sudo_schedule_para_initialize {
 			id,
 			genesis: ParaGenesisArgs {
 				genesis_head: genesis_head.into(),
-				validation_code: validation_code.into(),
+				validation_code: validation_code.clone(),
 				para_kind: ParaKind::Parachain,
 			},
 		};
 
-		self.send_extrinsic(SudoCall::sudo { call: Box::new(call.into()) }, Sr25519Keyring::Alice)
-			.await
-			.map(drop)
+		self.send_sudo(call, Sr25519Keyring::Alice, 0).await?;
+
+		// Bypass pvf-checking.
+		let call = ParasCall::add_trusted_validation_code { validation_code };
+		self.send_sudo(call, Sr25519Keyring::Alice, 1).await
 	}
 
 	/// Wait for `count` blocks to be imported in the node and then exit. This function will not return if no blocks
 	/// are ever created, thus you should restrict the maximum amount of time of the test execution.
 	pub fn wait_for_blocks(&self, count: usize) -> impl Future<Output = ()> {
 		self.client.wait_for_blocks(count)
+	}
+
+	/// Wait for `count` blocks to be finalized and then exit. Similarly with `wait_for_blocks` this function will
+	/// not return if no block are ever finalized.
+	pub async fn wait_for_finalized_blocks(&self, count: usize) {
+		let mut import_notification_stream = self.client.finality_notification_stream();
+		let mut blocks = HashSet::new();
+
+		while let Some(notification) = import_notification_stream.next().await {
+			blocks.insert(notification.hash);
+			if blocks.len() == count {
+				break
+			}
+		}
 	}
 
 	/// Register the collator functionality in the overseer of this node.
@@ -342,7 +372,7 @@ impl VineTestNode {
 /// Construct an extrinsic that can be applied to the test runtime.
 pub fn construct_extrinsic(
 	client: &Client,
-	function: impl Into<vine_test_runtime::RuntimeCall>,
+	function: impl Into<polkadot_test_runtime::RuntimeCall>,
 	caller: Sr25519Keyring,
 	nonce: u32,
 ) -> UncheckedExtrinsic {
@@ -380,8 +410,8 @@ pub fn construct_extrinsic(
 	let signature = raw_payload.using_encoded(|e| caller.sign(e));
 	UncheckedExtrinsic::new_signed(
 		function.clone(),
-		vine_test_runtime::Address::Id(caller.public().into()),
-		vine_primitives::v2::Signature::Sr25519(signature.clone()),
+		polkadot_test_runtime::Address::Id(caller.public().into()),
+		polkadot_primitives::Signature::Sr25519(signature.clone()),
 		extra.clone(),
 	)
 }
@@ -393,10 +423,11 @@ pub fn construct_transfer_extrinsic(
 	dest: sp_keyring::AccountKeyring,
 	value: Balance,
 ) -> UncheckedExtrinsic {
-	let function = vine_test_runtime::RuntimeCall::Balances(pallet_balances::Call::transfer {
-		dest: MultiSigner::from(dest.public()).into_account().into(),
-		value,
-	});
+	let function =
+		polkadot_test_runtime::RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
+			dest: MultiSigner::from(dest.public()).into_account().into(),
+			value,
+		});
 
 	construct_extrinsic(client, function, origin, 0)
 }

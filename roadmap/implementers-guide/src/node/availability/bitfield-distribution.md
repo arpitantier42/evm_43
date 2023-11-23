@@ -20,7 +20,7 @@ Output:
 
 This is implemented as a gossip system.
 
-It is necessary to track vine connection, view change, and disconnection events, in order to maintain an index of which peers are interested in which relay parent bitfields.
+It is necessary to track peer connection, view change, and disconnection events, in order to maintain an index of which peers are interested in which relay parent bitfields.
 
 
 Before gossiping incoming bitfields, they must be checked to be signed by one of the validators

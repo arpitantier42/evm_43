@@ -1,4 +1,4 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
+// Copyright (C) Parity Technologies (UK) Ltd.
 // This file is part of Substrate.
 
 // Substrate is free software: you can redistribute it and/or modify
@@ -14,11 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate.  If not, see <http://www.gnu.org/licenses/>.
 
-//! vine runtime metrics integration test.
+//! Polkadot runtime metrics integration test.
 
 use hyper::{Client, Uri};
-use vine_test_service::{node_config, run_validator_node, test_prometheus_config};
-use primitives::v2::metric_definitions::PARACHAIN_INHERENT_DATA_BITFIELDS_PROCESSED;
+use polkadot_test_service::{node_config, run_validator_node, test_prometheus_config};
+use primitives::metric_definitions::PARACHAIN_INHERENT_DATA_BITFIELDS_PROCESSED;
 use sc_client_api::{execution_extensions::ExecutionStrategies, ExecutionStrategy};
 use sp_keyring::AccountKeyring::*;
 use std::collections::HashMap;
@@ -61,8 +61,8 @@ async fn runtime_can_publish_metrics() {
 	// Start validator Bob.
 	let _bob = run_validator_node(bob_config, None);
 
-	// Wait for Alice to author two blocks.
-	alice.wait_for_blocks(2).await;
+	// Wait for Alice to see two finalized blocks.
+	alice.wait_for_finalized_blocks(2).await;
 
 	let metrics_uri = format!("http://localhost:{}/metrics", DEFAULT_PROMETHEUS_PORT);
 	let metrics = scrape_prometheus_metrics(&metrics_uri).await;

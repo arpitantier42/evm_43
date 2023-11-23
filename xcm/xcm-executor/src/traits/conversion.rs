@@ -1,22 +1,24 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
+use frame_support::traits::{Contains, OriginTrait};
 use parity_scale_codec::{Decode, Encode};
-use sp_std::{borrow::Borrow, prelude::*, result::Result};
-use xcm::latest::{MultiLocation, OriginKind};
+use sp_runtime::{traits::Dispatchable, DispatchErrorWithPostInfo};
+use sp_std::{borrow::Borrow, marker::PhantomData, prelude::*, result::Result};
+use xcm::latest::prelude::*;
 
 /// Generic third-party conversion trait. Use this when you don't want to force the user to use default
 /// implementations of `From` and `Into` for the types you wish to convert between.
@@ -204,9 +206,43 @@ impl<O> ConvertOrigin<O> for Tuple {
 	}
 }
 
-/// Means of inverting a location: given a location which describes a `target` interpreted from the
-/// `source`, this will provide the corresponding location which describes the `source`.
-pub trait InvertLocation {
-	fn ancestry() -> MultiLocation;
-	fn invert_location(l: &MultiLocation) -> Result<MultiLocation, ()>;
+/// Defines how a call is dispatched with given origin.
+/// Allows to customize call dispatch, such as adapting the origin based on the call
+/// or modifying the call.
+pub trait CallDispatcher<Call: Dispatchable> {
+	fn dispatch(
+		call: Call,
+		origin: Call::RuntimeOrigin,
+	) -> Result<Call::PostInfo, DispatchErrorWithPostInfo<Call::PostInfo>>;
+}
+
+pub struct WithOriginFilter<Filter>(PhantomData<Filter>);
+impl<Call, Filter> CallDispatcher<Call> for WithOriginFilter<Filter>
+where
+	Call: Dispatchable,
+	Call::RuntimeOrigin: OriginTrait,
+	<<Call as Dispatchable>::RuntimeOrigin as OriginTrait>::Call: 'static,
+	Filter: Contains<<<Call as Dispatchable>::RuntimeOrigin as OriginTrait>::Call> + 'static,
+{
+	fn dispatch(
+		call: Call,
+		mut origin: <Call as Dispatchable>::RuntimeOrigin,
+	) -> Result<
+		<Call as Dispatchable>::PostInfo,
+		DispatchErrorWithPostInfo<<Call as Dispatchable>::PostInfo>,
+	> {
+		origin.add_filter(Filter::contains);
+		call.dispatch(origin)
+	}
+}
+
+// We implement it for every calls so they can dispatch themselves
+// (without any change).
+impl<Call: Dispatchable> CallDispatcher<Call> for Call {
+	fn dispatch(
+		call: Call,
+		origin: Call::RuntimeOrigin,
+	) -> Result<Call::PostInfo, DispatchErrorWithPostInfo<Call::PostInfo>> {
+		call.dispatch(origin)
+	}
 }

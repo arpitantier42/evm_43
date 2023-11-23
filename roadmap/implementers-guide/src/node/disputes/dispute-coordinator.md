@@ -9,7 +9,11 @@ In particular the dispute-coordinator is responsible for:
 
 - Ensuring that the node is able to raise a dispute in case an invalid candidate
   is found during approval checking.
-- Ensuring approval votes will be recorded.
+- Ensuring that backing and approval votes will be recorded on chain. With these 
+  votes on chain we can be certain that appropriate targets for slashing will be
+  available for concluded disputes. Also, scraping these votes during a dispute
+  is necessary for critical spam prevention measures.
+- Ensuring backing votes will never get overridden by explicit votes.
 - Coordinating actual participation in a dispute, ensuring that the node
   participates in any justified dispute in a way that ensures resolution of
   disputes on the network even in the case of many disputes raised (flood/DoS
@@ -17,15 +21,13 @@ In particular the dispute-coordinator is responsible for:
 - Ensuring disputes resolve, even for candidates on abandoned forks as much as
   reasonably possible, to rule out "free tries" and thus guarantee our gambler's
   ruin property.
-- Provide an API for chain selection, so we can prevent finalization of any
+- Providing an API for chain selection, so we can prevent finalization of any
   chain which has included candidates for which a dispute is either ongoing or
   concluded invalid and avoid building on chains with an included invalid
   candidate.
-- Provide an API for retrieving (resolved) disputes, including all votes, both
+- Providing an API for retrieving (resolved) disputes, including all votes, both
   implicit (approval, backing) and explicit dispute votes. So validators can get
   rewarded/slashed accordingly.
-- Ensure backing votes are recorded and will never get overridden by explicit
-  votes.
 
 ## Ensuring That Disputes Can Be Raised
 
@@ -234,7 +236,7 @@ ones in the previous set and will be able to record votes on chain.
 Still, for maximum accountability we need to make sure a previous authority set
 can communicate votes to the next one, regardless of any chain: This is yet to
 be implemented see section "Resiliency" in dispute-distribution and
-[this](https://github.com/paritytech/vine/issues/3398) ticket.
+[this](https://github.com/paritytech/polkadot/issues/3398) ticket.
 
 ## Coordinating Actual Dispute Participation
 
@@ -259,7 +261,7 @@ along and trigger participation no matter what.
 
 ### Spam Considerations
 
-In vine's security model, it is important that attempts to attack the system
+In Polkadot's security model, it is important that attempts to attack the system
 result in a slash of the offenders. Therefore we need to make sure that this
 slash is actually happening. Attackers could try to prevent the slashing from
 taking place, by overwhelming validators with disputes in such a way that no
@@ -355,7 +357,7 @@ block number of the parent when we are inserting the dispute in the queue. To
 account for races, we will promote any existing participation request to the
 priority queue once we learn about an including block. NOTE: this is still work
 in progress and is tracked by [this
-issue](https://github.com/paritytech/vine/issues/5875).
+issue](https://github.com/paritytech/polkadot/issues/5875).
 
 ### Abandoned Forks
 
@@ -398,11 +400,22 @@ and only if all of the following conditions are satisfied:
 * the dispute is not confirmed
 * we haven't cast a vote for the dispute
 
+Whenever any vote on a dispute is imported these conditions are checked. If the
+dispute is found not to be potential spam, then spam slots for the disputed candidate hash are cleared. This decrements the spam count for every validator
+which had voted invalid.
+
+To keep spam slots from filling up unnecessarily we want to clear spam slots
+whenever a candidate is seen to be backed or included. Fortunately this behavior
+is acheived by clearing slots on vote import as described above. Because on chain
+backing votes are processed when a block backing the disputed candidate is discovered, spam slots are cleared for every backed candidate. Included
+candidates have also been seen as backed on the same fork, so decrementing spam
+slots is handled in that case as well.
+
 The reason this works is because we only need to worry about actual dispute
 votes. Import of backing votes are already rate limited and concern only real
-candidates for approval votes a similar argument holds (if they come from
+candidates. For approval votes a similar argument holds (if they come from
 approval-voting), but we also don't import them until a dispute already
-concluded. For actual dispute votes, we need two opposing votes, so there must be
+concluded. For actual dispute votes we need two opposing votes, so there must be
 an explicit `invalid` vote in the import. Only a third of the validators can be
 malicious, so spam disk usage is limited to `2*vote_size*n/3*NUM_SPAM_SLOTS`, with
 `n` being the number of validators.
@@ -516,16 +529,14 @@ We only ever care about disputes for candidates that have been included on at
 least some chain (became available). This is because the availability system was
 designed for precisely that: Only with inclusion (availability) we have
 guarantees about the candidate to actually be available. Because only then we
-have guarantees that malicious backers can be reliably checked and slashed. The
-system was also designed for non included candidates to not pose any threat to
-the system.
+have guarantees that malicious backers can be reliably checked and slashed. Also, by design non included candidates do not pose any threat to the system.
 
 One could think of an (additional) dispute system to make it possible to dispute
 any candidate that has been proposed by a validator, no matter whether it got
 successfully included or even backed. Unfortunately, it would be very brittle
 (no availability) and also spam protection would be way harder than for the
-disputes handled by the dispute-coordinator. In fact all described spam handling
-strategies above would simply be not available.
+disputes handled by the dispute-coordinator. In fact, all the spam handling
+strategies described above would simply be unavailable.
 
 It is worth thinking about who could actually raise such disputes anyway:
 Approval checkers certainly not, as they will only ever check once availability
@@ -573,7 +584,7 @@ this goal as it massively reduces the amount of candidates that can be disputed.
 
 This makes attempts to overwhelm the system with disputes significantly harder
 and counter measures way easier. We can limit inclusion for example (as
-suggested [here](https://github.com/paritytech/vine/issues/5898) in case of
+suggested [here](https://github.com/paritytech/polkadot/issues/5898) in case of
 high dispute load. Another measure we have at our disposal is that on finality
 lag block production will slow down, implicitly reducing the rate of new
 candidates that can be disputed. Hence, the cutting-off of the unlimited
@@ -672,12 +683,17 @@ struct State {
 ```
 
 ### On startup
-When the subsystem is initialised it waits for a new leaf (message `OverseerSignal::ActiveLeaves`).
-The leaf is used to initialise a `RollingSessionWindow` instance (contains leaf hash and
-`DISPUTE_WINDOW` which is a constant.
 
-Next the active disputes are loaded from the DB. The subsystem checks if there are disputes for
-which a local statement is not issued. A list of these is passed to the main loop.
+When the subsystem is initialised it waits for a new leaf (message
+`OverseerSignal::ActiveLeaves`). The leaf is used to initialise a
+`RollingSessionWindow` instance (contains leaf hash and `DISPUTE_WINDOW` which
+is a constant).
+
+Next the active disputes are loaded from the DB and initialize spam slots
+accordingly, then for each loaded dispute, we either send a
+`DisputeDistribution::SendDispute` if there is a local vote from us available or
+if there is none and participation is in order, we push the dispute to
+participation.
 
 ### The main loop
 

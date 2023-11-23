@@ -1,24 +1,28 @@
 [package]
-name = "vine-performance-test"
+name = "polkadot-performance-test"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
 thiserror = "1.0.31"
-quote = "1.0.20"
+quote = "1.0.26"
 env_logger = "0.9"
 log = "0.4"
 
-vine-node-core-pvf = { path = "../../core/pvf" }
-vine-erasure-coding = { path = "../../../erasure-coding" }
-vine-node-primitives = { path = "../../primitives" }
+polkadot-node-core-pvf-worker = { path = "../../core/pvf/worker" }
+polkadot-erasure-coding = { path = "../../../erasure-coding" }
+polkadot-node-primitives = { path = "../../primitives" }
+polkadot-primitives = { path = "../../../primitives" }
 
-vine-runtime = { path = "../../../runtime/vine" }
+sc-executor-common = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-maybe-compressed-blob = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+
+kusama-runtime = { path = "../../../runtime/kusama" }
 
 [[bin]]
 name = "gen-ref-constants"
 path = "src/gen_ref_constants.rs"
 
 [features]
-runtime-benchmarks = ["vine-runtime/runtime-benchmarks"]
+runtime-benchmarks = ["kusama-runtime/runtime-benchmarks"]

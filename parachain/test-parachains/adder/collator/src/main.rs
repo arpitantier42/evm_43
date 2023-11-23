@@ -1,25 +1,25 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Collator for the adder test parachain.
 
-use vine_cli::{Error, Result};
-use vine_node_primitives::CollationGenerationConfig;
-use vine_node_subsystem::messages::{CollationGenerationMessage, CollatorProtocolMessage};
-use vine_primitives::v2::Id as ParaId;
+use polkadot_cli::{Error, Result};
+use polkadot_node_primitives::CollationGenerationConfig;
+use polkadot_node_subsystem::messages::{CollationGenerationMessage, CollatorProtocolMessage};
+use polkadot_primitives::Id as ParaId;
 use sc_cli::{Error as SubstrateCliError, SubstrateCli};
 use sp_core::hexdisplay::HexDisplay;
 use test_parachain_adder_collator::Collator;
@@ -56,15 +56,15 @@ fn main() -> Result<()> {
 			runner.run_node_until_exit(|config| async move {
 				let collator = Collator::new();
 
-				let full_node = vine_service::build_full(
+				let full_node = polkadot_service::build_full(
 					config,
-					vine_service::IsCollator::Yes(collator.collator_key()),
+					polkadot_service::IsCollator::Yes(collator.collator_key()),
 					None,
 					false,
 					None,
 					None,
 					false,
-					vine_service::RealOverseerGen,
+					polkadot_service::RealOverseerGen,
 					None,
 					None,
 					None,

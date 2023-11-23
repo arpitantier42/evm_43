@@ -1,18 +1,18 @@
-// Copyright 2019-2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Mocking utilities for testing.
 
@@ -22,7 +22,9 @@ use frame_support::{
 	weights::Weight,
 };
 use parity_scale_codec::{Decode, Encode};
-use primitives::v2::{HeadData, Id as ParaId, ValidationCode};
+use primitives::{HeadData, Id as ParaId, PvfCheckStatement, SessionIndex, ValidationCode};
+use runtime_parachains::paras;
+use sp_keyring::Sr25519Keyring;
 use sp_runtime::{traits::SaturatedConversion, Permill};
 use std::{cell::RefCell, collections::HashMap};
 
@@ -230,4 +232,31 @@ impl frame_support::traits::EstimateNextSessionRotation<u32> for TestNextSession
 	fn estimate_next_session_rotation(_now: u32) -> (Option<u32>, Weight) {
 		(None, Weight::zero())
 	}
+}
+
+pub fn validators_public_keys(validators: &[Sr25519Keyring]) -> Vec<primitives::ValidatorId> {
+	validators.iter().map(|v| v.public().into()).collect()
+}
+
+pub fn conclude_pvf_checking<T: paras::Config>(
+	validation_code: &ValidationCode,
+	validators: &[Sr25519Keyring],
+	session_index: SessionIndex,
+) {
+	let num_required = primitives::supermajority_threshold(validators.len());
+	validators.iter().enumerate().take(num_required).for_each(|(idx, key)| {
+		let validator_index = idx as u32;
+		let statement = PvfCheckStatement {
+			accept: true,
+			subject: validation_code.hash(),
+			session_index,
+			validator_index: validator_index.into(),
+		};
+		let signature = key.sign(&statement.signing_payload());
+		let _ = paras::Pallet::<T>::include_pvf_check_statement(
+			frame_system::Origin::<T>::None.into(),
+			statement,
+			signature.into(),
+		);
+	});
 }

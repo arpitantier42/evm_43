@@ -6,12 +6,12 @@ edition = "2021"
 description = "Primitives for Frontier consensus."
  
 [dependencies]
-ethereum = { version = "0.14.0", default-features = false }
-scale-codec = { package = "parity-scale-codec", version = "3.2.1", default-features = false, features = ["derive"] }
+ethereum = { version = "0.14.0",default-features=false, features = ["with-codec"]}
+scale-codec = { package = "parity-scale-codec", version = "3.2.2", default-features = false, features = ["derive"] }
 # Substrate
-sp-core = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" , default-features = false  }
-sp-runtime = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" , default-features = false  }
-sp-std = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer", default-features = false   }
+sp-core = { version = "7.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
+sp-runtime = { version = "7.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
+sp-std = { version = "5.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
 	
 [features]
 default = ["std"]
@@ -23,3 +23,6 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 ]
+
+
+

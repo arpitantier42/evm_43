@@ -1,20 +1,20 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// vine is free software: you can redistribute it and/or modify
+// Copyright (C) Parity Technologies (UK) Ltd.
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Metrics for the statement distribution module
 
-use vine_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_node_subsystem_util::metrics::{self, prometheus};
 
 /// Buckets more suitable for checking the typical latency values
 const HISTOGRAM_LATENCY_BUCKETS: &[f64] = &[
@@ -126,14 +126,14 @@ impl metrics::Metrics for Metrics {
 		let metrics = MetricsInner {
 			statements_distributed: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_statements_distributed_total",
+					"polkadot_parachain_statements_distributed_total",
 					"Number of candidate validity statements distributed to other peers.",
 				)?,
 				registry,
 			)?,
 			sent_requests: prometheus::register(
 				prometheus::Counter::new(
-					"vine_parachain_statement_distribution_sent_requests_total",
+					"polkadot_parachain_statement_distribution_sent_requests_total",
 					"Number of large statement fetching requests sent.",
 				)?,
 				registry,
@@ -141,7 +141,7 @@ impl metrics::Metrics for Metrics {
 			received_responses: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_statement_distribution_received_responses_total",
+						"polkadot_parachain_statement_distribution_received_responses_total",
 						"Number of received responses for large statement data.",
 					),
 					&["success"],
@@ -151,7 +151,7 @@ impl metrics::Metrics for Metrics {
 			active_leaves_update: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_statement_distribution_active_leaves_update",
+						"polkadot_parachain_statement_distribution_active_leaves_update",
 						"Time spent within `statement_distribution::active_leaves_update`",
 					)
 					.buckets(HISTOGRAM_LATENCY_BUCKETS.into()),
@@ -161,7 +161,7 @@ impl metrics::Metrics for Metrics {
 			share: prometheus::register(
 				prometheus::Histogram::with_opts(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_statement_distribution_share",
+						"polkadot_parachain_statement_distribution_share",
 						"Time spent within `statement_distribution::share`",
 					)
 					.buckets(HISTOGRAM_LATENCY_BUCKETS.into()),
@@ -171,7 +171,7 @@ impl metrics::Metrics for Metrics {
 			network_bridge_update_v1: prometheus::register(
 				prometheus::HistogramVec::new(
 					prometheus::HistogramOpts::new(
-						"vine_parachain_statement_distribution_network_bridge_update_v1",
+						"polkadot_parachain_statement_distribution_network_bridge_update_v1",
 						"Time spent within `statement_distribution::network_bridge_update_v1`",
 					)
 					.buckets(HISTOGRAM_LATENCY_BUCKETS.into()),
@@ -182,7 +182,7 @@ impl metrics::Metrics for Metrics {
 			statements_unexpected: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_statement_distribution_statements_unexpected",
+						"polkadot_parachain_statement_distribution_statements_unexpected",
 						"Number of statements that were not expected to be received.",
 					),
 					&["type"],
@@ -191,7 +191,7 @@ impl metrics::Metrics for Metrics {
 			)?,
 			created_message_size: prometheus::register(
 				prometheus::Gauge::with_opts(prometheus::Opts::new(
-					"vine_parachain_statement_distribution_created_message_size",
+					"polkadot_parachain_statement_distribution_created_message_size",
 					"Size of created messages containing Seconded statements.",
 				))?,
 				registry,

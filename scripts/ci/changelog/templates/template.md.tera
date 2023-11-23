@@ -1,5 +1,5 @@
 {# This is the entry point of the template -#}
-<!-- repository: {{ vine.repository.name }} -->
+<!-- repository: {{ polkadot.repository.name }} -->
 {% include "pre_release.md.tera" -%}
 
 {% if env.PRE_RELEASE == "true" -%}
@@ -8,11 +8,11 @@ This pre-release contains the changes from `{{ env.REF1 | replace(from="refs/tag
 This release contains the changes from `{{ env.REF1 | replace(from="refs/tags/", to="") }}` to `{{ env.REF2 | replace(from="refs/tags/", to="") }}`.
 {% endif -%}
 
-{%- set changes = vine.changes | concat(with=substrate.changes) -%}
+{%- set changes = polkadot.changes | concat(with=substrate.changes) -%}
 {%- include "debug.md.tera" -%}
 
 {%- set CML = "[C]" -%}
-{%- set vine = "[P]" -%}
+{%- set DOT = "[P]" -%}
 {%- set SUB = "[S]" -%}
 
 {# -- Manual free notes section -- #}

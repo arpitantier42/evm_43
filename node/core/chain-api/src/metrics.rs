@@ -1,20 +1,20 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use vine_node_subsystem_util::metrics::{self, prometheus};
+use polkadot_node_metrics::metrics::{self, prometheus};
 
 #[derive(Clone)]
 pub(crate) struct MetricsInner {
@@ -83,7 +83,7 @@ impl metrics::Metrics for Metrics {
 			chain_api_requests: prometheus::register(
 				prometheus::CounterVec::new(
 					prometheus::Opts::new(
-						"vine_parachain_chain_api_requests_total",
+						"polkadot_parachain_chain_api_requests_total",
 						"Number of Chain API requests served.",
 					),
 					&["success"],
@@ -92,42 +92,42 @@ impl metrics::Metrics for Metrics {
 			)?,
 			block_number: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_chain_api_block_number",
+					"polkadot_parachain_chain_api_block_number",
 					"Time spent within `chain_api::block_number`",
 				))?,
 				registry,
 			)?,
 			block_header: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_chain_api_block_headers",
+					"polkadot_parachain_chain_api_block_headers",
 					"Time spent within `chain_api::block_headers`",
 				))?,
 				registry,
 			)?,
 			block_weight: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_chain_api_block_weight",
+					"polkadot_parachain_chain_api_block_weight",
 					"Time spent within `chain_api::block_weight`",
 				))?,
 				registry,
 			)?,
 			finalized_block_hash: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_chain_api_finalized_block_hash",
+					"polkadot_parachain_chain_api_finalized_block_hash",
 					"Time spent within `chain_api::finalized_block_hash`",
 				))?,
 				registry,
 			)?,
 			finalized_block_number: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_chain_api_finalized_block_number",
+					"polkadot_parachain_chain_api_finalized_block_number",
 					"Time spent within `chain_api::finalized_block_number`",
 				))?,
 				registry,
 			)?,
 			ancestors: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_chain_api_ancestors",
+					"polkadot_parachain_chain_api_ancestors",
 					"Time spent within `chain_api::ancestors`",
 				))?,
 				registry,

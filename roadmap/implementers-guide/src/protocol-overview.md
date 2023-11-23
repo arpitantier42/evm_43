@@ -1,8 +1,8 @@
 # Protocol Overview
 
-This section aims to describe, at a high level, the actors and protocols involved in running parachains in vine. Specifically, we describe how different actors communicate with each other, what data structures they keep both individually and collectively, and the high-level purpose on why they do these things.
+This section aims to describe, at a high level, the actors and protocols involved in running parachains in Polkadot. Specifically, we describe how different actors communicate with each other, what data structures they keep both individually and collectively, and the high-level purpose on why they do these things.
 
-Our top-level goal is to carry a parachain block from authoring to secure inclusion, and define a process which can be carried out repeatedly and in parallel for many different parachains to extend them over time. Understanding of the high-level approach taken here is important to provide context for the proposed architecture further on. The key parts of vine relevant to this are the main vine blockchain, known as the relay-chain, and the actors which provide security and inputs to this blockchain.
+Our top-level goal is to carry a parachain block from authoring to secure inclusion, and define a process which can be carried out repeatedly and in parallel for many different parachains to extend them over time. Understanding of the high-level approach taken here is important to provide context for the proposed architecture further on. The key parts of Polkadot relevant to this are the main Polkadot blockchain, known as the relay-chain, and the actors which provide security and inputs to this blockchain.
 
 First, it's important to go over the main actors we have involved in this protocol.
 
@@ -57,7 +57,7 @@ Reiterating the lifecycle of a candidate:
 1. Included: Backed and considered available.
 1. Accepted: Backed, available, and undisputed
 
-```vine process Inclusion Pipeline
+```dot process Inclusion Pipeline
 digraph {
 	subgraph cluster_vg {
 		label=<
@@ -132,7 +132,7 @@ The diagram above shows the happy path of a block from (1) Candidate to the (7) 
 It is also important to take note of the fact that the relay-chain is extended by BABE, which is a forkful algorithm. That means that different block authors can be chosen at the same time, and may not be building on the same block parent. Furthermore, the set of validators is not fixed, nor is the set of parachains. And even with the same set of validators and parachains, the validators' assignments to parachains is flexible. This means that the architecture proposed in the next chapters must deal with the variability and multiplicity of the network state.
 
 
-```vine process
+```dot process
 digraph {
 	rca [label="Relay Block A" shape=box]
 	rcb [label="Relay Block B" shape=box]
@@ -171,7 +171,7 @@ digraph {
 
 In this example, group 1 has received block C while the others have not due to network asynchrony. Now, a validator from group 2 may be able to build another block on top of B, called `C'`. Assume that afterwards, some validators become aware of both C and `C'`, while others remain only aware of one.
 
-```vine process
+```dot process
 digraph {
 	rca [label="Relay Block A" shape=box]
 	rcb [label="Relay Block B" shape=box]

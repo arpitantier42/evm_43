@@ -16,16 +16,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+#![deny(unused_crate_dependencies)]
+
 pub mod types;
 
 mod eth;
 mod eth_pubsub;
 mod net;
+mod txpool;
 mod web3;
 
 pub use self::{
 	eth::{EthApiServer, EthFilterApiServer},
 	eth_pubsub::EthPubSubApiServer,
 	net::NetApiServer,
+	txpool::TxPoolApiServer,
 	web3::Web3ApiServer,
 };

@@ -1,78 +1,78 @@
-// Copyright 2017-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::{AuthorityDiscoveryApi, Block, Error, Hash, IsCollator, Registry};
 use sp_core::traits::SpawnNamed;
 
 use lru::LruCache;
-use vine_availability_distribution::IncomingRequestReceivers;
-use vine_node_core_approval_voting::Config as ApprovalVotingConfig;
-use vine_node_core_av_store::Config as AvailabilityConfig;
-use vine_node_core_candidate_validation::Config as CandidateValidationConfig;
-use vine_node_core_chain_selection::Config as ChainSelectionConfig;
-use vine_node_core_dispute_coordinator::Config as DisputeCoordinatorConfig;
-use vine_node_network_protocol::{
+use polkadot_availability_distribution::IncomingRequestReceivers;
+use polkadot_node_core_approval_voting::Config as ApprovalVotingConfig;
+use polkadot_node_core_av_store::Config as AvailabilityConfig;
+use polkadot_node_core_candidate_validation::Config as CandidateValidationConfig;
+use polkadot_node_core_chain_selection::Config as ChainSelectionConfig;
+use polkadot_node_core_dispute_coordinator::Config as DisputeCoordinatorConfig;
+use polkadot_node_network_protocol::{
 	peer_set::PeerSetProtocolNames,
 	request_response::{v1 as request_v1, IncomingRequestReceiver, ReqProtocolNames},
 };
 #[cfg(any(feature = "malus", test))]
-pub use vine_overseer::{
+pub use polkadot_overseer::{
 	dummy::{dummy_overseer_builder, DummySubsystem},
 	HeadSupportsParachains,
 };
-use vine_overseer::{
-	metrics::Metrics as OverseerMetrics, BlockInfo, InitializedOverseerBuilder, MetricsTrait,
-	Overseer, OverseerConnector, OverseerHandle, SpawnGlue,
+use polkadot_overseer::{
+	metrics::Metrics as OverseerMetrics, InitializedOverseerBuilder, MetricsTrait, Overseer,
+	OverseerConnector, OverseerHandle, SpawnGlue,
 };
 
-use vine_primitives::runtime_api::ParachainHost;
+use polkadot_primitives::runtime_api::ParachainHost;
 use sc_authority_discovery::Service as AuthorityDiscoveryService;
 use sc_client_api::AuxStore;
 use sc_keystore::LocalKeystore;
-use sc_network_common::service::NetworkStateInfo;
+use sc_network::NetworkStateInfo;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_consensus_babe::BabeApi;
 use std::sync::Arc;
 
-pub use vine_approval_distribution::ApprovalDistribution as ApprovalDistributionSubsystem;
-pub use vine_availability_bitfield_distribution::BitfieldDistribution as BitfieldDistributionSubsystem;
-pub use vine_availability_distribution::AvailabilityDistributionSubsystem;
-pub use vine_availability_recovery::AvailabilityRecoverySubsystem;
-pub use vine_collator_protocol::{CollatorProtocolSubsystem, ProtocolSide};
-pub use vine_dispute_distribution::DisputeDistributionSubsystem;
-pub use vine_gossip_support::GossipSupport as GossipSupportSubsystem;
-pub use vine_network_bridge::{
+pub use polkadot_approval_distribution::ApprovalDistribution as ApprovalDistributionSubsystem;
+pub use polkadot_availability_bitfield_distribution::BitfieldDistribution as BitfieldDistributionSubsystem;
+pub use polkadot_availability_distribution::AvailabilityDistributionSubsystem;
+pub use polkadot_availability_recovery::AvailabilityRecoverySubsystem;
+pub use polkadot_collator_protocol::{CollatorProtocolSubsystem, ProtocolSide};
+pub use polkadot_dispute_distribution::DisputeDistributionSubsystem;
+pub use polkadot_gossip_support::GossipSupport as GossipSupportSubsystem;
+pub use polkadot_network_bridge::{
 	Metrics as NetworkBridgeMetrics, NetworkBridgeRx as NetworkBridgeRxSubsystem,
 	NetworkBridgeTx as NetworkBridgeTxSubsystem,
 };
-pub use vine_node_collation_generation::CollationGenerationSubsystem;
-pub use vine_node_core_approval_voting::ApprovalVotingSubsystem;
-pub use vine_node_core_av_store::AvailabilityStoreSubsystem;
-pub use vine_node_core_backing::CandidateBackingSubsystem;
-pub use vine_node_core_bitfield_signing::BitfieldSigningSubsystem;
-pub use vine_node_core_candidate_validation::CandidateValidationSubsystem;
-pub use vine_node_core_chain_api::ChainApiSubsystem;
-pub use vine_node_core_chain_selection::ChainSelectionSubsystem;
-pub use vine_node_core_dispute_coordinator::DisputeCoordinatorSubsystem;
-pub use vine_node_core_provisioner::ProvisionerSubsystem;
-pub use vine_node_core_pvf_checker::PvfCheckerSubsystem;
-pub use vine_node_core_runtime_api::RuntimeApiSubsystem;
-use vine_node_subsystem_util::rand::{self, SeedableRng};
-pub use vine_statement_distribution::StatementDistributionSubsystem;
+pub use polkadot_node_collation_generation::CollationGenerationSubsystem;
+pub use polkadot_node_core_approval_voting::ApprovalVotingSubsystem;
+pub use polkadot_node_core_av_store::AvailabilityStoreSubsystem;
+pub use polkadot_node_core_backing::CandidateBackingSubsystem;
+pub use polkadot_node_core_bitfield_signing::BitfieldSigningSubsystem;
+pub use polkadot_node_core_candidate_validation::CandidateValidationSubsystem;
+pub use polkadot_node_core_chain_api::ChainApiSubsystem;
+pub use polkadot_node_core_chain_selection::ChainSelectionSubsystem;
+pub use polkadot_node_core_dispute_coordinator::DisputeCoordinatorSubsystem;
+pub use polkadot_node_core_provisioner::ProvisionerSubsystem;
+pub use polkadot_node_core_pvf_checker::PvfCheckerSubsystem;
+pub use polkadot_node_core_runtime_api::RuntimeApiSubsystem;
+use polkadot_node_subsystem_util::rand::{self, SeedableRng};
+pub use polkadot_statement_distribution::StatementDistributionSubsystem;
 
 /// Arguments passed for overseer construction.
 pub struct OverseerGenArgs<'a, Spawner, RuntimeClient>
@@ -81,16 +81,16 @@ where
 	RuntimeClient::Api: ParachainHost<Block> + BabeApi<Block> + AuthorityDiscoveryApi<Block>,
 	Spawner: 'static + SpawnNamed + Clone + Unpin,
 {
-	/// Set of initial relay chain leaves to track.
-	pub leaves: Vec<BlockInfo>,
 	/// The keystore to use for i.e. validator keys.
 	pub keystore: Arc<LocalKeystore>,
 	/// Runtime client generic, providing the `ProvieRuntimeApi` trait besides others.
 	pub runtime_client: Arc<RuntimeClient>,
 	/// The underlying key value store for the parachains.
-	pub parachains_db: Arc<dyn vine_node_subsystem_util::database::Database>,
+	pub parachains_db: Arc<dyn polkadot_node_subsystem_util::database::Database>,
 	/// Underlying network service implementation.
 	pub network_service: Arc<sc_network::NetworkService<Block, Hash>>,
+	/// Underlying syncing service implementation.
+	pub sync_service: Arc<sc_network_sync::SyncingService<Block>>,
 	/// Underlying authority discovery service.
 	pub authority_discovery_service: AuthorityDiscoveryService,
 	/// POV request receiver
@@ -131,11 +131,11 @@ where
 /// with all default values.
 pub fn prepared_overseer_builder<Spawner, RuntimeClient>(
 	OverseerGenArgs {
-		leaves,
 		keystore,
 		runtime_client,
 		parachains_db,
 		network_service,
+		sync_service,
 		authority_discovery_service,
 		pov_req_receiver,
 		chunk_req_receiver,
@@ -196,7 +196,7 @@ where
 	RuntimeClient::Api: ParachainHost<Block> + BabeApi<Block> + AuthorityDiscoveryApi<Block>,
 	Spawner: 'static + SpawnNamed + Clone + Unpin,
 {
-	use vine_node_subsystem_util::metrics::Metrics;
+	use polkadot_node_subsystem_util::metrics::Metrics;
 
 	let metrics = <OverseerMetrics as MetricsTrait>::register(registry)?;
 
@@ -215,7 +215,7 @@ where
 		.network_bridge_rx(NetworkBridgeRxSubsystem::new(
 			network_service.clone(),
 			authority_discovery_service.clone(),
-			Box::new(network_service.clone()),
+			Box::new(sync_service.clone()),
 			network_bridge_metrics,
 			peerset_protocol_names,
 		))
@@ -224,13 +224,14 @@ where
 			IncomingRequestReceivers { pov_req_receiver, chunk_req_receiver },
 			Metrics::register(registry)?,
 		))
-		.availability_recovery(AvailabilityRecoverySubsystem::with_chunks_only(
+		.availability_recovery(AvailabilityRecoverySubsystem::with_chunks_if_pov_large(
 			available_data_req_receiver,
 			Metrics::register(registry)?,
 		))
 		.availability_store(AvailabilityStoreSubsystem::new(
 			parachains_db.clone(),
 			availability_config,
+			Box::new(sync_service.clone()),
 			Metrics::register(registry)?,
 		))
 		.bitfield_distribution(BitfieldDistributionSubsystem::new(Metrics::register(registry)?))
@@ -287,7 +288,7 @@ where
 			approval_voting_config,
 			parachains_db.clone(),
 			keystore.clone(),
-			Box::new(network_service.clone()),
+			Box::new(sync_service.clone()),
 			Metrics::register(registry)?,
 		))
 		.gossip_support(GossipSupportSubsystem::new(
@@ -308,11 +309,6 @@ where
 			Metrics::register(registry)?,
 		))
 		.chain_selection(ChainSelectionSubsystem::new(chain_selection_config, parachains_db))
-		.leaves(Vec::from_iter(
-			leaves
-				.into_iter()
-				.map(|BlockInfo { hash, parent_hash: _, number }| (hash, number)),
-		))
 		.activation_external_listeners(Default::default())
 		.span_per_active_leaf(Default::default())
 		.active_leaves(Default::default())
@@ -352,7 +348,7 @@ pub trait OverseerGen {
 	// as consequence make this rather annoying to implement and use.
 }
 
-use vine_overseer::KNOWN_LEAVES_CACHE_SIZE;
+use polkadot_overseer::KNOWN_LEAVES_CACHE_SIZE;
 
 /// The regular set of subsystems.
 pub struct RealOverseerGen;

@@ -1,26 +1,26 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Version 1 of the DB schema.
 
 use parity_scale_codec::{Decode, Encode};
-use vine_node_primitives::approval::{AssignmentCert, DelayTranche};
-use vine_node_subsystem::{SubsystemError, SubsystemResult};
-use vine_node_subsystem_util::database::{DBTransaction, Database};
-use vine_primitives::v2::{
+use polkadot_node_primitives::approval::{AssignmentCert, DelayTranche};
+use polkadot_node_subsystem::{SubsystemError, SubsystemResult};
+use polkadot_node_subsystem_util::database::{DBTransaction, Database};
+use polkadot_primitives::{
 	BlockNumber, CandidateHash, CandidateReceipt, CoreIndex, GroupIndex, Hash, SessionIndex,
 	ValidatorIndex, ValidatorSignature,
 };

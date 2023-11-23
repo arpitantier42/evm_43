@@ -1,4 +1,4 @@
 # Further Reading
 
-- vine Wiki on Consensus: <https://wiki.vine.network/docs/learn-consensus>
-- vine Spec: <https://github.com/w3f/vine-spec>
+- Polkadot Wiki on Consensus: <https://wiki.polkadot.network/docs/learn-consensus>
+- Polkadot Spec: <https://github.com/w3f/polkadot-spec>

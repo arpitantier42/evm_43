@@ -1,25 +1,25 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use assert_matches::assert_matches;
-use futures::{executor, future, Future, SinkExt};
+use futures::{executor, future, Future};
 use futures_timer::Delay;
 
 use parity_scale_codec::{Decode, Encode};
@@ -29,25 +29,25 @@ use sp_core::crypto::Pair;
 use sp_keyring::Sr25519Keyring;
 use sp_runtime::traits::AppVerify;
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	our_view,
 	peer_set::CollationVersion,
 	request_response::{IncomingRequest, ReqProtocolNames},
 	view,
 };
-use vine_node_primitives::BlockData;
-use vine_node_subsystem::{
+use polkadot_node_primitives::BlockData;
+use polkadot_node_subsystem::{
 	jaeger,
 	messages::{AllMessages, RuntimeApiMessage, RuntimeApiRequest},
 	ActivatedLeaf, ActiveLeavesUpdate, LeafStatus,
 };
-use vine_node_subsystem_test_helpers as test_helpers;
-use vine_node_subsystem_util::TimeoutExt;
-use vine_primitives::v2::{
+use polkadot_node_subsystem_test_helpers as test_helpers;
+use polkadot_node_subsystem_util::TimeoutExt;
+use polkadot_primitives::{
 	AuthorityDiscoveryId, CollatorPair, GroupIndex, GroupRotationInfo, IndexedVec, ScheduledCore,
 	SessionIndex, SessionInfo, ValidatorId, ValidatorIndex,
 };
-use vine_primitives_test_helpers::TestCandidateBuilder;
+use polkadot_primitives_test_helpers::TestCandidateBuilder;
 
 #[derive(Clone)]
 struct TestState {
@@ -201,7 +201,7 @@ fn test_harness<T: Future<Output = TestHarness>>(
 ) {
 	let _ = env_logger::builder()
 		.is_test(true)
-		.filter(Some("vine_collator_protocol"), log::LevelFilter::Trace)
+		.filter(Some("polkadot_collator_protocol"), log::LevelFilter::Trace)
 		.filter(Some(LOG_TARGET), log::LevelFilter::Trace)
 		.try_init();
 
@@ -392,17 +392,17 @@ async fn distribute_collation(
 	DistributeCollation { candidate, pov_block }
 }
 
-/// Connect a vine
+/// Connect a peer
 async fn connect_peer(
 	virtual_overseer: &mut VirtualOverseer,
-	vine: PeerId,
+	peer: PeerId,
 	authority_id: Option<AuthorityDiscoveryId>,
 ) {
 	overseer_send(
 		virtual_overseer,
 		CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerConnected(
-			vine.clone(),
-			vine_node_network_protocol::ObservedRole::Authority,
+			peer.clone(),
+			polkadot_node_network_protocol::ObservedRole::Authority,
 			CollationVersion::V1.into(),
 			authority_id.map(|v| HashSet::from([v])),
 		)),
@@ -412,18 +412,18 @@ async fn connect_peer(
 	overseer_send(
 		virtual_overseer,
 		CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerViewChange(
-			vine,
+			peer,
 			view![],
 		)),
 	)
 	.await;
 }
 
-/// Disconnect a vine
-async fn disconnect_peer(virtual_overseer: &mut VirtualOverseer, vine: PeerId) {
+/// Disconnect a peer
+async fn disconnect_peer(virtual_overseer: &mut VirtualOverseer, peer: PeerId) {
 	overseer_send(
 		virtual_overseer,
-		CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerDisconnected(vine)),
+		CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerDisconnected(peer)),
 	)
 	.await;
 }
@@ -432,7 +432,7 @@ async fn disconnect_peer(virtual_overseer: &mut VirtualOverseer, vine: PeerId) {
 async fn expect_declare_msg(
 	virtual_overseer: &mut VirtualOverseer,
 	test_state: &TestState,
-	vine: &PeerId,
+	peer: &PeerId,
 ) {
 	assert_matches!(
 		overseer_recv(virtual_overseer).await,
@@ -442,7 +442,7 @@ async fn expect_declare_msg(
 				Versioned::V1(protocol_v1::CollationProtocol::CollatorProtocol(wire_message)),
 			)
 		) => {
-			assert_eq!(to[0], *vine);
+			assert_eq!(to[0], *peer);
 			assert_matches!(
 				wire_message,
 				protocol_v1::CollatorProtocolMessage::Declare(
@@ -465,7 +465,7 @@ async fn expect_declare_msg(
 /// Check that the next received message is a collation advertisement message.
 async fn expect_advertise_collation_msg(
 	virtual_overseer: &mut VirtualOverseer,
-	vine: &PeerId,
+	peer: &PeerId,
 	expected_relay_parent: Hash,
 ) {
 	assert_matches!(
@@ -476,7 +476,7 @@ async fn expect_advertise_collation_msg(
 				Versioned::V1(protocol_v1::CollationProtocol::CollatorProtocol(wire_message)),
 			)
 		) => {
-			assert_eq!(to[0], *vine);
+			assert_eq!(to[0], *peer);
 			assert_matches!(
 				wire_message,
 				protocol_v1::CollatorProtocolMessage::AdvertiseCollation(
@@ -489,16 +489,16 @@ async fn expect_advertise_collation_msg(
 	);
 }
 
-/// Send a message that the given vine's view changed.
+/// Send a message that the given peer's view changed.
 async fn send_peer_view_change(
 	virtual_overseer: &mut VirtualOverseer,
-	vine: &PeerId,
+	peer: &PeerId,
 	hashes: Vec<Hash>,
 ) {
 	overseer_send(
 		virtual_overseer,
 		CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerViewChange(
-			vine.clone(),
+			peer.clone(),
 			View::new(hashes, 0),
 		)),
 	)
@@ -520,12 +520,12 @@ fn advertise_and_send_collation() {
 		let DistributeCollation { candidate, pov_block } =
 			distribute_collation(&mut virtual_overseer, &test_state, true).await;
 
-		for (val, vine) in test_state
+		for (val, peer) in test_state
 			.current_group_validator_authority_ids()
 			.into_iter()
 			.zip(test_state.current_group_validator_peer_ids())
 		{
-			connect_peer(&mut virtual_overseer, vine.clone(), Some(val.clone())).await;
+			connect_peer(&mut virtual_overseer, peer.clone(), Some(val.clone())).await;
 		}
 
 		// We declare to the connected validators that we are a collator.
@@ -535,14 +535,14 @@ fn advertise_and_send_collation() {
 			expect_declare_msg(&mut virtual_overseer, &test_state, &peer_id).await;
 		}
 
-		let vine = test_state.current_group_validator_peer_ids()[0].clone();
+		let peer = test_state.current_group_validator_peer_ids()[0].clone();
 
-		// Send info about vine's view.
-		send_peer_view_change(&mut virtual_overseer, &vine, vec![test_state.relay_parent]).await;
+		// Send info about peer's view.
+		send_peer_view_change(&mut virtual_overseer, &peer, vec![test_state.relay_parent]).await;
 
-		// The vine is interested in a leaf that we have a collation for;
+		// The peer is interested in a leaf that we have a collation for;
 		// advertise it.
-		expect_advertise_collation_msg(&mut virtual_overseer, &vine, test_state.relay_parent).await;
+		expect_advertise_collation_msg(&mut virtual_overseer, &peer, test_state.relay_parent).await;
 
 		// Request a collation.
 		let (pending_response, rx) = oneshot::channel();
@@ -551,7 +551,7 @@ fn advertise_and_send_collation() {
 			.as_mut()
 			.unwrap()
 			.send(RawIncomingRequest {
-				vine,
+				peer,
 				payload: CollationFetchingRequest {
 					relay_parent: test_state.relay_parent,
 					para_id: test_state.para_id,
@@ -561,7 +561,7 @@ fn advertise_and_send_collation() {
 			})
 			.await
 			.unwrap();
-		// Second request by same validator should get dropped and vine reported:
+		// Second request by same validator should get dropped and peer reported:
 		{
 			let (pending_response, rx) = oneshot::channel();
 
@@ -570,7 +570,7 @@ fn advertise_and_send_collation() {
 				.as_mut()
 				.unwrap()
 				.send(RawIncomingRequest {
-					vine,
+					peer,
 					payload: CollationFetchingRequest {
 						relay_parent: test_state.relay_parent,
 						para_id: test_state.para_id,
@@ -583,7 +583,7 @@ fn advertise_and_send_collation() {
 			assert_matches!(
 				overseer_recv(&mut virtual_overseer).await,
 				AllMessages::NetworkBridgeTx(NetworkBridgeTxMessage::ReportPeer(bad_peer, _)) => {
-					assert_eq!(bad_peer, vine);
+					assert_eq!(bad_peer, peer);
 				}
 			);
 			assert_matches!(
@@ -610,7 +610,7 @@ fn advertise_and_send_collation() {
 		let old_relay_parent = test_state.relay_parent;
 		test_state.advance_to_new_round(&mut virtual_overseer, false).await;
 
-		let vine = test_state.validator_peer_id[2].clone();
+		let peer = test_state.validator_peer_id[2].clone();
 
 		// Re-request a collation.
 		let (pending_response, rx) = oneshot::channel();
@@ -620,7 +620,7 @@ fn advertise_and_send_collation() {
 			.as_mut()
 			.unwrap()
 			.send(RawIncomingRequest {
-				vine,
+				peer,
 				payload: CollationFetchingRequest {
 					relay_parent: old_relay_parent,
 					para_id: test_state.para_id,
@@ -637,17 +637,17 @@ fn advertise_and_send_collation() {
 
 		distribute_collation(&mut virtual_overseer, &test_state, true).await;
 
-		// Send info about vine's view.
+		// Send info about peer's view.
 		overseer_send(
 			&mut virtual_overseer,
 			CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerViewChange(
-				vine.clone(),
+				peer.clone(),
 				view![test_state.relay_parent],
 			)),
 		)
 		.await;
 
-		expect_advertise_collation_msg(&mut virtual_overseer, &vine, test_state.relay_parent).await;
+		expect_advertise_collation_msg(&mut virtual_overseer, &peer, test_state.relay_parent).await;
 		TestHarness { virtual_overseer, req_cfg }
 	});
 }
@@ -682,14 +682,14 @@ fn collators_declare_to_connected_peers() {
 	let collator_pair = test_state.collator_pair.clone();
 
 	test_harness(local_peer_id, collator_pair, |mut test_harness| async move {
-		let vine = test_state.validator_peer_id[0].clone();
+		let peer = test_state.validator_peer_id[0].clone();
 		let validator_id = test_state.current_group_validator_authority_ids()[0].clone();
 
 		setup_system(&mut test_harness.virtual_overseer, &test_state).await;
 
 		// A validator connected to us
-		connect_peer(&mut test_harness.virtual_overseer, vine.clone(), Some(validator_id)).await;
-		expect_declare_msg(&mut test_harness.virtual_overseer, &test_state, &vine).await;
+		connect_peer(&mut test_harness.virtual_overseer, peer.clone(), Some(validator_id)).await;
+		expect_declare_msg(&mut test_harness.virtual_overseer, &test_state, &peer).await;
 		test_harness
 	})
 }
@@ -703,7 +703,7 @@ fn collations_are_only_advertised_to_validators_with_correct_view() {
 	test_harness(local_peer_id, collator_pair, |mut test_harness| async move {
 		let virtual_overseer = &mut test_harness.virtual_overseer;
 
-		let vine = test_state.current_group_validator_peer_ids()[0].clone();
+		let peer = test_state.current_group_validator_peer_ids()[0].clone();
 		let validator_id = test_state.current_group_validator_authority_ids()[0].clone();
 
 		let peer2 = test_state.current_group_validator_peer_ids()[1].clone();
@@ -712,12 +712,12 @@ fn collations_are_only_advertised_to_validators_with_correct_view() {
 		setup_system(virtual_overseer, &test_state).await;
 
 		// A validator connected to us
-		connect_peer(virtual_overseer, vine.clone(), Some(validator_id)).await;
+		connect_peer(virtual_overseer, peer.clone(), Some(validator_id)).await;
 
 		// Connect the second validator
 		connect_peer(virtual_overseer, peer2.clone(), Some(validator_id2)).await;
 
-		expect_declare_msg(virtual_overseer, &test_state, &vine).await;
+		expect_declare_msg(virtual_overseer, &test_state, &peer).await;
 		expect_declare_msg(virtual_overseer, &test_state, &peer2).await;
 
 		// And let it tell us that it is has the same view.
@@ -728,10 +728,10 @@ fn collations_are_only_advertised_to_validators_with_correct_view() {
 		expect_advertise_collation_msg(virtual_overseer, &peer2, test_state.relay_parent).await;
 
 		// The other validator announces that it changed its view.
-		send_peer_view_change(virtual_overseer, &vine, vec![test_state.relay_parent]).await;
+		send_peer_view_change(virtual_overseer, &peer, vec![test_state.relay_parent]).await;
 
 		// After changing the view we should receive the advertisement
-		expect_advertise_collation_msg(virtual_overseer, &vine, test_state.relay_parent).await;
+		expect_advertise_collation_msg(virtual_overseer, &peer, test_state.relay_parent).await;
 		test_harness
 	})
 }
@@ -745,7 +745,7 @@ fn collate_on_two_different_relay_chain_blocks() {
 	test_harness(local_peer_id, collator_pair, |mut test_harness| async move {
 		let virtual_overseer = &mut test_harness.virtual_overseer;
 
-		let vine = test_state.current_group_validator_peer_ids()[0].clone();
+		let peer = test_state.current_group_validator_peer_ids()[0].clone();
 		let validator_id = test_state.current_group_validator_authority_ids()[0].clone();
 
 		let peer2 = test_state.current_group_validator_peer_ids()[1].clone();
@@ -754,12 +754,12 @@ fn collate_on_two_different_relay_chain_blocks() {
 		setup_system(virtual_overseer, &test_state).await;
 
 		// A validator connected to us
-		connect_peer(virtual_overseer, vine.clone(), Some(validator_id)).await;
+		connect_peer(virtual_overseer, peer.clone(), Some(validator_id)).await;
 
 		// Connect the second validator
 		connect_peer(virtual_overseer, peer2.clone(), Some(validator_id2)).await;
 
-		expect_declare_msg(virtual_overseer, &test_state, &vine).await;
+		expect_declare_msg(virtual_overseer, &test_state, &peer).await;
 		expect_declare_msg(virtual_overseer, &test_state, &peer2).await;
 
 		distribute_collation(virtual_overseer, &test_state, true).await;
@@ -771,8 +771,8 @@ fn collate_on_two_different_relay_chain_blocks() {
 
 		distribute_collation(virtual_overseer, &test_state, true).await;
 
-		send_peer_view_change(virtual_overseer, &vine, vec![old_relay_parent]).await;
-		expect_advertise_collation_msg(virtual_overseer, &vine, old_relay_parent).await;
+		send_peer_view_change(virtual_overseer, &peer, vec![old_relay_parent]).await;
+		expect_advertise_collation_msg(virtual_overseer, &peer, old_relay_parent).await;
 
 		send_peer_view_change(virtual_overseer, &peer2, vec![test_state.relay_parent]).await;
 
@@ -790,26 +790,26 @@ fn validator_reconnect_does_not_advertise_a_second_time() {
 	test_harness(local_peer_id, collator_pair, |mut test_harness| async move {
 		let virtual_overseer = &mut test_harness.virtual_overseer;
 
-		let vine = test_state.current_group_validator_peer_ids()[0].clone();
+		let peer = test_state.current_group_validator_peer_ids()[0].clone();
 		let validator_id = test_state.current_group_validator_authority_ids()[0].clone();
 
 		setup_system(virtual_overseer, &test_state).await;
 
 		// A validator connected to us
-		connect_peer(virtual_overseer, vine.clone(), Some(validator_id.clone())).await;
-		expect_declare_msg(virtual_overseer, &test_state, &vine).await;
+		connect_peer(virtual_overseer, peer.clone(), Some(validator_id.clone())).await;
+		expect_declare_msg(virtual_overseer, &test_state, &peer).await;
 
 		distribute_collation(virtual_overseer, &test_state, true).await;
 
-		send_peer_view_change(virtual_overseer, &vine, vec![test_state.relay_parent]).await;
-		expect_advertise_collation_msg(virtual_overseer, &vine, test_state.relay_parent).await;
+		send_peer_view_change(virtual_overseer, &peer, vec![test_state.relay_parent]).await;
+		expect_advertise_collation_msg(virtual_overseer, &peer, test_state.relay_parent).await;
 
 		// Disconnect and reconnect directly
-		disconnect_peer(virtual_overseer, vine.clone()).await;
-		connect_peer(virtual_overseer, vine.clone(), Some(validator_id)).await;
-		expect_declare_msg(virtual_overseer, &test_state, &vine).await;
+		disconnect_peer(virtual_overseer, peer.clone()).await;
+		connect_peer(virtual_overseer, peer.clone(), Some(validator_id)).await;
+		expect_declare_msg(virtual_overseer, &test_state, &peer).await;
 
-		send_peer_view_change(virtual_overseer, &vine, vec![test_state.relay_parent]).await;
+		send_peer_view_change(virtual_overseer, &peer, vec![test_state.relay_parent]).await;
 
 		assert!(overseer_recv_with_timeout(virtual_overseer, TIMEOUT).await.is_none());
 		test_harness
@@ -826,19 +826,19 @@ fn collators_reject_declare_messages() {
 	test_harness(local_peer_id, collator_pair, |mut test_harness| async move {
 		let virtual_overseer = &mut test_harness.virtual_overseer;
 
-		let vine = test_state.current_group_validator_peer_ids()[0].clone();
+		let peer = test_state.current_group_validator_peer_ids()[0].clone();
 		let validator_id = test_state.current_group_validator_authority_ids()[0].clone();
 
 		setup_system(virtual_overseer, &test_state).await;
 
 		// A validator connected to us
-		connect_peer(virtual_overseer, vine.clone(), Some(validator_id)).await;
-		expect_declare_msg(virtual_overseer, &test_state, &vine).await;
+		connect_peer(virtual_overseer, peer.clone(), Some(validator_id)).await;
+		expect_declare_msg(virtual_overseer, &test_state, &peer).await;
 
 		overseer_send(
 			virtual_overseer,
 			CollatorProtocolMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerMessage(
-				vine.clone(),
+				peer.clone(),
 				Versioned::V1(protocol_v1::CollatorProtocolMessage::Declare(
 					collator_pair2.public(),
 					ParaId::from(5),
@@ -853,7 +853,7 @@ fn collators_reject_declare_messages() {
 			AllMessages::NetworkBridgeTx(NetworkBridgeTxMessage::DisconnectPeer(
 				p,
 				PeerSet::Collation,
-			)) if p == vine
+			)) if p == peer
 		);
 		test_harness
 	})
@@ -886,12 +886,12 @@ where
 		let DistributeCollation { candidate, pov_block } =
 			distribute_collation(virtual_overseer, &test_state, true).await;
 
-		for (val, vine) in test_state
+		for (val, peer) in test_state
 			.current_group_validator_authority_ids()
 			.into_iter()
 			.zip(test_state.current_group_validator_peer_ids())
 		{
-			connect_peer(virtual_overseer, vine.clone(), Some(val.clone())).await;
+			connect_peer(virtual_overseer, peer.clone(), Some(val.clone())).await;
 		}
 
 		// We declare to the connected validators that we are a collator.
@@ -904,11 +904,11 @@ where
 		let validator_0 = test_state.current_group_validator_peer_ids()[0].clone();
 		let validator_1 = test_state.current_group_validator_peer_ids()[1].clone();
 
-		// Send info about vine's view.
+		// Send info about peer's view.
 		send_peer_view_change(virtual_overseer, &validator_0, vec![test_state.relay_parent]).await;
 		send_peer_view_change(virtual_overseer, &validator_1, vec![test_state.relay_parent]).await;
 
-		// The vine is interested in a leaf that we have a collation for;
+		// The peer is interested in a leaf that we have a collation for;
 		// advertise it.
 		expect_advertise_collation_msg(virtual_overseer, &validator_0, test_state.relay_parent)
 			.await;
@@ -922,7 +922,7 @@ where
 			.as_mut()
 			.unwrap()
 			.send(RawIncomingRequest {
-				vine: validator_0,
+				peer: validator_0,
 				payload: CollationFetchingRequest {
 					relay_parent: test_state.relay_parent,
 					para_id: test_state.para_id,
@@ -957,7 +957,7 @@ where
 			.as_mut()
 			.unwrap()
 			.send(RawIncomingRequest {
-				vine: validator_1,
+				peer: validator_1,
 				payload: CollationFetchingRequest {
 					relay_parent: test_state.relay_parent,
 					para_id: test_state.para_id,
@@ -1020,8 +1020,8 @@ fn connect_to_buffered_groups() {
 
 		let head_a = test_state.relay_parent;
 
-		for (val, vine) in group_a.iter().zip(&peers_a) {
-			connect_peer(&mut virtual_overseer, vine.clone(), Some(val.clone())).await;
+		for (val, peer) in group_a.iter().zip(&peers_a) {
+			connect_peer(&mut virtual_overseer, peer.clone(), Some(val.clone())).await;
 		}
 
 		for peer_id in &peers_a {
@@ -1034,7 +1034,7 @@ fn connect_to_buffered_groups() {
 			expect_advertise_collation_msg(&mut virtual_overseer, peed_id, head_a).await;
 		}
 
-		let vine = peers_a[0];
+		let peer = peers_a[0];
 		// Peer from the group fetches the collation.
 		let (pending_response, rx) = oneshot::channel();
 		req_cfg
@@ -1042,7 +1042,7 @@ fn connect_to_buffered_groups() {
 			.as_mut()
 			.unwrap()
 			.send(RawIncomingRequest {
-				vine,
+				peer,
 				payload: CollationFetchingRequest {
 					relay_parent: head_a,
 					para_id: test_state.para_id,

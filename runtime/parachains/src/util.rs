@@ -1,23 +1,23 @@
-// Copyright 2017-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Utilities that don't belong to any particular module but may draw
 //! on all modules.
 
-use primitives::v2::{Id as ParaId, PersistedValidationData, ValidatorIndex};
+use primitives::{Id as ParaId, PersistedValidationData, ValidatorIndex};
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 use crate::{configuration, hrmp, paras};
@@ -103,7 +103,7 @@ mod tests {
 	use sp_std::vec::Vec;
 
 	use crate::util::{split_active_subset, take_active_subset};
-	use primitives::v2::ValidatorIndex;
+	use primitives::ValidatorIndex;
 
 	#[test]
 	fn take_active_subset_is_compatible_with_split_active_subset() {

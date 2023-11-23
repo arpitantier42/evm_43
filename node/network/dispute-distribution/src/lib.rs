@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! # Sending and receiving of `DisputeRequest`s.
 //!
@@ -28,16 +28,17 @@ use std::{num::NonZeroUsize, time::Duration};
 
 use futures::{channel::mpsc, FutureExt, StreamExt, TryFutureExt};
 
-use vine_node_network_protocol::authority_discovery::AuthorityDiscovery;
-use sp_keystore::SyncCryptoStorePtr;
+use polkadot_node_network_protocol::authority_discovery::AuthorityDiscovery;
+use polkadot_node_subsystem_util::nesting_sender::NestingSender;
+use sp_keystore::KeystorePtr;
 
-use vine_node_network_protocol::request_response::{incoming::IncomingRequestReceiver, v1};
-use vine_node_primitives::DISPUTE_WINDOW;
-use vine_node_subsystem::{
+use polkadot_node_network_protocol::request_response::{incoming::IncomingRequestReceiver, v1};
+use polkadot_node_primitives::DISPUTE_WINDOW;
+use polkadot_node_subsystem::{
 	messages::DisputeDistributionMessage, overseer, FromOrchestra, OverseerSignal,
 	SpawnedSubsystem, SubsystemError,
 };
-use vine_node_subsystem_util::{runtime, runtime::RuntimeInfo};
+use polkadot_node_subsystem_util::{runtime, runtime::RuntimeInfo};
 
 /// ## The sender [`DisputeSender`]
 ///
@@ -51,33 +52,33 @@ use vine_node_subsystem_util::{runtime, runtime::RuntimeInfo};
 /// to this subsystem, unknown dispute. This is to make sure, we get our vote out, even on
 /// restarts.
 ///
-///	The actual work of sending and keeping track of transmission attempts to each validator for a
-///	particular dispute are done by [`SendTask`].  The purpose of the `DisputeSender` is to keep
-///	track of all ongoing disputes and start and clean up `SendTask`s accordingly.
+/// The actual work of sending and keeping track of transmission attempts to each validator for a
+/// particular dispute are done by [`SendTask`].  The purpose of the `DisputeSender` is to keep
+/// track of all ongoing disputes and start and clean up `SendTask`s accordingly.
 mod sender;
-use self::sender::{DisputeSender, TaskFinish};
+use self::sender::{DisputeSender, DisputeSenderMessage};
 
-///	## The receiver [`DisputesReceiver`]
+/// ## The receiver [`DisputesReceiver`]
 ///
-///	The receiving side is implemented as `DisputesReceiver` and is run as a separate long running task within
-///	this subsystem ([`DisputesReceiver::run`]).
+/// The receiving side is implemented as `DisputesReceiver` and is run as a separate long running task within
+/// this subsystem ([`DisputesReceiver::run`]).
 ///
-///	Conceptually all the receiver has to do, is waiting for incoming requests which are passed in
-///	via a dedicated channel and forwarding them to the dispute coordinator via
-///	`DisputeCoordinatorMessage::ImportStatements`. Being the interface to the network and untrusted
-///	nodes, the reality is not that simple of course. Before importing statements the receiver will
-///	batch up imports as well as possible for efficient imports while maintaining timely dispute
-///	resolution and handling of spamming validators:
+/// Conceptually all the receiver has to do, is waiting for incoming requests which are passed in
+/// via a dedicated channel and forwarding them to the dispute coordinator via
+/// `DisputeCoordinatorMessage::ImportStatements`. Being the interface to the network and untrusted
+/// nodes, the reality is not that simple of course. Before importing statements the receiver will
+/// batch up imports as well as possible for efficient imports while maintaining timely dispute
+/// resolution and handling of spamming validators:
 ///
-///	- Drop all messages from non validator nodes, for this it requires the [`AuthorityDiscovery`]
-///	service.
-///	- Drop messages from a node, if it sends at a too high rate.
-///	- Filter out duplicate messages (over some period of time).
-///	- Drop any obviously invalid votes (invalid signatures for example).
-///	- Ban peers whose votes were deemed invalid.
+/// - Drop all messages from non validator nodes, for this it requires the [`AuthorityDiscovery`]
+/// service.
+/// - Drop messages from a node, if it sends at a too high rate.
+/// - Filter out duplicate messages (over some period of time).
+/// - Drop any obviously invalid votes (invalid signatures for example).
+/// - Ban peers whose votes were deemed invalid.
 ///
-///	In general dispute-distribution works on limiting the work the dispute-coordinator will have to
-///	do, while at the same time making it aware of new disputes as fast as possible.
+/// In general dispute-distribution works on limiting the work the dispute-coordinator will have to
+/// do, while at the same time making it aware of new disputes as fast as possible.
 ///
 /// For successfully imported votes, we will confirm the receipt of the message back to the sender.
 /// This way a received confirmation guarantees, that the vote has been stored to disk by the
@@ -87,7 +88,7 @@ use self::receiver::DisputesReceiver;
 
 /// Error and [`Result`] type for this subsystem.
 mod error;
-use error::{log_error, FatalError, FatalResult, Result};
+use error::{log_error, Error, FatalError, FatalResult, Result};
 
 #[cfg(test)]
 mod tests;
@@ -100,8 +101,8 @@ const LOG_TARGET: &'static str = "parachain::dispute-distribution";
 
 /// Rate limit on the `receiver` side.
 ///
-/// If messages from one vine come in at a higher rate than every `RECEIVE_RATE_LIMIT` on average, we
-/// start dropping messages from that vine to enforce that limit.
+/// If messages from one peer come in at a higher rate than every `RECEIVE_RATE_LIMIT` on average, we
+/// start dropping messages from that peer to enforce that limit.
 pub const RECEIVE_RATE_LIMIT: Duration = Duration::from_millis(100);
 
 /// Rate limit on the `sender` side.
@@ -118,10 +119,10 @@ pub struct DisputeDistributionSubsystem<AD> {
 	runtime: RuntimeInfo,
 
 	/// Sender for our dispute requests.
-	disputes_sender: DisputeSender,
+	disputes_sender: DisputeSender<DisputeSenderMessage>,
 
-	/// Receive messages from `SendTask`.
-	sender_rx: mpsc::Receiver<TaskFinish>,
+	/// Receive messages from `DisputeSender` background tasks.
+	sender_rx: mpsc::Receiver<DisputeSenderMessage>,
 
 	/// Receiver for incoming requests.
 	req_receiver: Option<IncomingRequestReceiver<v1::DisputeRequest>>,
@@ -155,9 +156,9 @@ impl<AD> DisputeDistributionSubsystem<AD>
 where
 	AD: AuthorityDiscovery + Clone,
 {
-	/// Create a new instance of the availability distribution.
+	/// Create a new instance of the dispute distribution.
 	pub fn new(
-		keystore: SyncCryptoStorePtr,
+		keystore: KeystorePtr,
 		req_receiver: IncomingRequestReceiver<v1::DisputeRequest>,
 		authority_discovery: AD,
 		metrics: Metrics,
@@ -167,7 +168,7 @@ where
 			session_cache_lru_size: NonZeroUsize::new(DISPUTE_WINDOW.get() as usize)
 				.expect("Dispute window can not be 0; qed"),
 		});
-		let (tx, sender_rx) = mpsc::channel(1);
+		let (tx, sender_rx) = NestingSender::new_root(1);
 		let disputes_sender = DisputeSender::new(tx, metrics.clone());
 		Self {
 			runtime,
@@ -216,9 +217,16 @@ where
 					log_error(result, "on FromOrchestra")?;
 				},
 				MuxedMessage::Sender(result) => {
-					self.disputes_sender
-						.on_task_message(result.ok_or(FatalError::SenderExhausted)?)
-						.await;
+					let result = self
+						.disputes_sender
+						.on_message(
+							&mut ctx,
+							&mut self.runtime,
+							result.ok_or(FatalError::SenderExhausted)?,
+						)
+						.await
+						.map_err(Error::Sender);
+					log_error(result, "on_message")?;
 				},
 			}
 		}
@@ -260,14 +268,14 @@ enum MuxedMessage {
 	/// Messages from other subsystems.
 	Subsystem(FatalResult<FromOrchestra<DisputeDistributionMessage>>),
 	/// Messages from spawned sender background tasks.
-	Sender(Option<TaskFinish>),
+	Sender(Option<DisputeSenderMessage>),
 }
 
 #[overseer::contextbounds(DisputeDistribution, prefix = self::overseer)]
 impl MuxedMessage {
 	async fn receive<Context>(
 		ctx: &mut Context,
-		from_sender: &mut mpsc::Receiver<TaskFinish>,
+		from_sender: &mut mpsc::Receiver<DisputeSenderMessage>,
 	) -> Self {
 		// We are only fusing here to make `select` happy, in reality we will quit if the stream
 		// ends.

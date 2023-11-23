@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! An abstraction over storage used by the chain selection subsystem.
 //!
@@ -21,8 +21,7 @@
 //! [`Backend`], maintaining consistency between queries and temporary writes,
 //! before any commit to the underlying storage is made.
 
-use vine_node_subsystem::SubsystemResult;
-use vine_primitives::v2::{CandidateHash, SessionIndex};
+use polkadot_primitives::{CandidateHash, SessionIndex};
 
 use std::collections::HashMap;
 
@@ -40,17 +39,17 @@ pub enum BackendWriteOp {
 /// An abstraction over backend storage for the logic of this subsystem.
 pub trait Backend {
 	/// Load the earliest session, if any.
-	fn load_earliest_session(&self) -> SubsystemResult<Option<SessionIndex>>;
+	fn load_earliest_session(&self) -> FatalResult<Option<SessionIndex>>;
 
 	/// Load the recent disputes, if any.
-	fn load_recent_disputes(&self) -> SubsystemResult<Option<RecentDisputes>>;
+	fn load_recent_disputes(&self) -> FatalResult<Option<RecentDisputes>>;
 
 	/// Load the candidate votes for the specific session-candidate pair, if any.
 	fn load_candidate_votes(
 		&self,
 		session: SessionIndex,
 		candidate_hash: &CandidateHash,
-	) -> SubsystemResult<Option<CandidateVotes>>;
+	) -> FatalResult<Option<CandidateVotes>>;
 
 	/// Atomically writes the list of operations, with later operations taking precedence over
 	/// prior.
@@ -93,7 +92,7 @@ impl<'a, B: 'a + Backend> OverlayedBackend<'a, B> {
 	}
 
 	/// Load the earliest session, if any.
-	pub fn load_earliest_session(&self) -> SubsystemResult<Option<SessionIndex>> {
+	pub fn load_earliest_session(&self) -> FatalResult<Option<SessionIndex>> {
 		if let Some(val) = self.earliest_session {
 			return Ok(Some(val))
 		}
@@ -102,7 +101,7 @@ impl<'a, B: 'a + Backend> OverlayedBackend<'a, B> {
 	}
 
 	/// Load the recent disputes, if any.
-	pub fn load_recent_disputes(&self) -> SubsystemResult<Option<RecentDisputes>> {
+	pub fn load_recent_disputes(&self) -> FatalResult<Option<RecentDisputes>> {
 		if let Some(val) = &self.recent_disputes {
 			return Ok(Some(val.clone()))
 		}
@@ -115,7 +114,7 @@ impl<'a, B: 'a + Backend> OverlayedBackend<'a, B> {
 		&self,
 		session: SessionIndex,
 		candidate_hash: &CandidateHash,
-	) -> SubsystemResult<Option<CandidateVotes>> {
+	) -> FatalResult<Option<CandidateVotes>> {
 		if let Some(val) = self.candidate_votes.get(&(session, *candidate_hash)) {
 			return Ok(val.clone())
 		}

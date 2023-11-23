@@ -1,36 +1,36 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::*;
 use assert_matches::assert_matches;
 use futures::{executor, future, Future};
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	grid_topology::{SessionGridTopology, TopologyPeerInfo},
 	our_view,
 	peer_set::ValidationVersion,
 	view, ObservedRole,
 };
-use vine_node_primitives::approval::{
-	AssignmentCertKind, VRFOutput, VRFProof, RELAY_VRF_MODULO_CONTEXT,
+use polkadot_node_primitives::approval::{
+	AssignmentCertKind, VrfOutput, VrfProof, VrfSignature, RELAY_VRF_MODULO_CONTEXT,
 };
-use vine_node_subsystem::messages::{network_bridge_event, AllMessages, ApprovalCheckError};
-use vine_node_subsystem_test_helpers as test_helpers;
-use vine_node_subsystem_util::TimeoutExt as _;
-use vine_primitives::v2::{AuthorityDiscoveryId, BlakeTwo256, HashT};
-use vine_primitives_test_helpers::dummy_signature;
+use polkadot_node_subsystem::messages::{network_bridge_event, AllMessages, ApprovalCheckError};
+use polkadot_node_subsystem_test_helpers as test_helpers;
+use polkadot_node_subsystem_util::TimeoutExt as _;
+use polkadot_primitives::{AuthorityDiscoveryId, BlakeTwo256, HashT};
+use polkadot_primitives_test_helpers::dummy_signature;
 use rand::SeedableRng;
 use sp_authority_discovery::AuthorityPair as AuthorityDiscoveryPair;
 use sp_core::crypto::Pair as PairT;
@@ -265,7 +265,7 @@ fn fake_assignment_cert(block_hash: Hash, validator: ValidatorIndex) -> Indirect
 		validator,
 		cert: AssignmentCert {
 			kind: AssignmentCertKind::RelayVRFModulo { sample: 1 },
-			vrf: (VRFOutput(out), VRFProof(proof)),
+			vrf: VrfSignature { output: VrfOutput(out), proof: VrfProof(proof) },
 		},
 	}
 }
@@ -290,8 +290,8 @@ async fn expect_reputation_change(
 }
 
 /// import an assignment
-/// connect a new vine
-/// the new vine sends us the same assignment
+/// connect a new peer
+/// the new peer sends us the same assignment
 #[test]
 fn try_import_the_same_assignment() {
 	let peer_a = PeerId::random();
@@ -358,7 +358,7 @@ fn try_import_the_same_assignment() {
 			}
 		);
 
-		// setup new vine
+		// setup new peer
 		setup_peer_with_view(overseer, &peer_d, view![]).await;
 
 		// send the same assignment from peer_d
@@ -373,7 +373,7 @@ fn try_import_the_same_assignment() {
 	});
 }
 
-/// <https://github.com/paritytech/vine/pull/2160#discussion_r547594835>
+/// <https://github.com/paritytech/polkadot/pull/2160#discussion_r547594835>
 ///
 /// 1. Send a view update that removes block B from their view.
 /// 2. Send a message from B that they incur `COST_UNEXPECTED_MESSAGE` for,
@@ -387,8 +387,8 @@ fn spam_attack_results_in_negative_reputation_change() {
 
 	let _ = test_harness(State::default(), |mut virtual_overseer| async move {
 		let overseer = &mut virtual_overseer;
-		let vine = &peer_a;
-		setup_peer_with_view(overseer, vine, view![]).await;
+		let peer = &peer_a;
+		setup_peer_with_view(overseer, peer, view![]).await;
 
 		// new block `hash_b` with 20 candidates
 		let candidates_count = 20;
@@ -415,10 +415,10 @@ fn spam_attack_results_in_negative_reputation_change() {
 			.collect();
 
 		let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments.clone());
-		send_message_from_peer(overseer, vine, msg.clone()).await;
+		send_message_from_peer(overseer, peer, msg.clone()).await;
 
 		for i in 0..candidates_count {
-			expect_reputation_change(overseer, vine, COST_UNEXPECTED_MESSAGE).await;
+			expect_reputation_change(overseer, peer, COST_UNEXPECTED_MESSAGE).await;
 
 			assert_matches!(
 				overseer_recv(overseer).await,
@@ -433,36 +433,36 @@ fn spam_attack_results_in_negative_reputation_change() {
 				}
 			);
 
-			expect_reputation_change(overseer, vine, BENEFIT_VALID_MESSAGE_FIRST).await;
+			expect_reputation_change(overseer, peer, BENEFIT_VALID_MESSAGE_FIRST).await;
 		}
 
-		// send a view update that removes block B from vine's view by bumping the finalized_number
+		// send a view update that removes block B from peer's view by bumping the finalized_number
 		overseer_send(
 			overseer,
 			ApprovalDistributionMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerViewChange(
-				vine.clone(),
+				peer.clone(),
 				View::with_finalized(2),
 			)),
 		)
 		.await;
 
 		// send the assignments again
-		send_message_from_peer(overseer, vine, msg.clone()).await;
+		send_message_from_peer(overseer, peer, msg.clone()).await;
 
 		// each of them will incur `COST_UNEXPECTED_MESSAGE`, not only the first one
 		for _ in 0..candidates_count {
-			expect_reputation_change(overseer, vine, COST_UNEXPECTED_MESSAGE).await;
-			expect_reputation_change(overseer, vine, BENEFIT_VALID_MESSAGE).await;
+			expect_reputation_change(overseer, peer, COST_UNEXPECTED_MESSAGE).await;
+			expect_reputation_change(overseer, peer, BENEFIT_VALID_MESSAGE).await;
 		}
 		virtual_overseer
 	});
 }
 
-/// Imagine we send a message to vine A and vine B.
+/// Imagine we send a message to peer A and peer B.
 /// Upon receiving them, they both will try to send the message each other.
 /// This test makes sure they will not punish each other for such duplicate messages.
 ///
-/// See <https://github.com/paritytech/vine/issues/2499>.
+/// See <https://github.com/paritytech/polkadot/issues/2499>.
 #[test]
 fn peer_sending_us_the_same_we_just_sent_them_is_ok() {
 	let parent_hash = Hash::repeat_byte(0xFF);
@@ -471,8 +471,8 @@ fn peer_sending_us_the_same_we_just_sent_them_is_ok() {
 
 	let _ = test_harness(State::default(), |mut virtual_overseer| async move {
 		let overseer = &mut virtual_overseer;
-		let vine = &peer_a;
-		setup_peer_with_view(overseer, vine, view![]).await;
+		let peer = &peer_a;
+		setup_peer_with_view(overseer, peer, view![]).await;
 
 		// new block `hash` with 1 candidates
 		let meta = BlockApprovalMeta {
@@ -496,11 +496,11 @@ fn peer_sending_us_the_same_we_just_sent_them_is_ok() {
 		)
 		.await;
 
-		// update vine view to include the hash
+		// update peer view to include the hash
 		overseer_send(
 			overseer,
 			ApprovalDistributionMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerViewChange(
-				vine.clone(),
+				peer.clone(),
 				view![hash],
 			)),
 		)
@@ -521,18 +521,18 @@ fn peer_sending_us_the_same_we_just_sent_them_is_ok() {
 		);
 
 		// but if someone else is sending it the same assignment
-		// the vine could send us it as well
+		// the peer could send us it as well
 		let assignments = vec![(cert, candidate_index)];
 		let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments);
-		send_message_from_peer(overseer, vine, msg.clone()).await;
+		send_message_from_peer(overseer, peer, msg.clone()).await;
 
-		assert!(overseer.recv().timeout(TIMEOUT).await.is_none(), "we should not punish the vine");
+		assert!(overseer.recv().timeout(TIMEOUT).await.is_none(), "we should not punish the peer");
 
 		// send the assignments again
-		send_message_from_peer(overseer, vine, msg).await;
+		send_message_from_peer(overseer, peer, msg).await;
 
 		// now we should
-		expect_reputation_change(overseer, vine, COST_DUPLICATE_MESSAGE).await;
+		expect_reputation_change(overseer, peer, COST_DUPLICATE_MESSAGE).await;
 		virtual_overseer
 	});
 }
@@ -789,7 +789,7 @@ fn update_peer_view() {
 	let hash_c = Hash::repeat_byte(0xCC);
 	let hash_d = Hash::repeat_byte(0xDD);
 	let peer_a = PeerId::random();
-	let vine = &peer_a;
+	let peer = &peer_a;
 
 	let state = test_harness(State::default(), |mut virtual_overseer| async move {
 		let overseer = &mut virtual_overseer;
@@ -829,10 +829,10 @@ fn update_peer_view() {
 
 		overseer_send(overseer, ApprovalDistributionMessage::DistributeAssignment(cert_b, 0)).await;
 
-		// connect a vine
-		setup_peer_with_view(overseer, vine, view![hash_a]).await;
+		// connect a peer
+		setup_peer_with_view(overseer, peer, view![hash_a]).await;
 
-		// we should send relevant assignments to the vine
+		// we should send relevant assignments to the peer
 		assert_matches!(
 			overseer_recv(overseer).await,
 			AllMessages::NetworkBridgeTx(NetworkBridgeTxMessage::SendValidationMessage(
@@ -848,14 +848,14 @@ fn update_peer_view() {
 		virtual_overseer
 	});
 
-	assert_eq!(state.peer_views.get(vine).map(|v| v.finalized_number), Some(0));
+	assert_eq!(state.peer_views.get(peer).map(|v| v.finalized_number), Some(0));
 	assert_eq!(
 		state
 			.blocks
 			.get(&hash_a)
 			.unwrap()
 			.known_by
-			.get(vine)
+			.get(peer)
 			.unwrap()
 			.sent
 			.known_messages
@@ -865,11 +865,11 @@ fn update_peer_view() {
 
 	let state = test_harness(state, |mut virtual_overseer| async move {
 		let overseer = &mut virtual_overseer;
-		// update vine's view
+		// update peer's view
 		overseer_send(
 			overseer,
 			ApprovalDistributionMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerViewChange(
-				vine.clone(),
+				peer.clone(),
 				View::new(vec![hash_b, hash_c, hash_d], 2),
 			)),
 		)
@@ -883,7 +883,7 @@ fn update_peer_view() {
 		)
 		.await;
 
-		// we should send relevant assignments to the vine
+		// we should send relevant assignments to the peer
 		assert_matches!(
 			overseer_recv(overseer).await,
 			AllMessages::NetworkBridgeTx(NetworkBridgeTxMessage::SendValidationMessage(
@@ -900,14 +900,14 @@ fn update_peer_view() {
 		virtual_overseer
 	});
 
-	assert_eq!(state.peer_views.get(vine).map(|v| v.finalized_number), Some(2));
+	assert_eq!(state.peer_views.get(peer).map(|v| v.finalized_number), Some(2));
 	assert_eq!(
 		state
 			.blocks
 			.get(&hash_c)
 			.unwrap()
 			.known_by
-			.get(vine)
+			.get(peer)
 			.unwrap()
 			.sent
 			.known_messages
@@ -918,11 +918,11 @@ fn update_peer_view() {
 	let finalized_number = 4_000_000_000;
 	let state = test_harness(state, |mut virtual_overseer| async move {
 		let overseer = &mut virtual_overseer;
-		// update vine's view
+		// update peer's view
 		overseer_send(
 			overseer,
 			ApprovalDistributionMessage::NetworkBridgeUpdate(NetworkBridgeEvent::PeerViewChange(
-				vine.clone(),
+				peer.clone(),
 				View::with_finalized(finalized_number),
 			)),
 		)
@@ -930,8 +930,8 @@ fn update_peer_view() {
 		virtual_overseer
 	});
 
-	assert_eq!(state.peer_views.get(vine).map(|v| v.finalized_number), Some(finalized_number));
-	assert!(state.blocks.get(&hash_c).unwrap().known_by.get(vine).is_none());
+	assert_eq!(state.peer_views.get(peer).map(|v| v.finalized_number), Some(finalized_number));
+	assert!(state.blocks.get(&hash_c).unwrap().known_by.get(peer).is_none());
 }
 
 /// E.g. if someone copies the keys...
@@ -940,12 +940,12 @@ fn import_remotely_then_locally() {
 	let peer_a = PeerId::random();
 	let parent_hash = Hash::repeat_byte(0xFF);
 	let hash = Hash::repeat_byte(0xAA);
-	let vine = &peer_a;
+	let peer = &peer_a;
 
 	let _ = test_harness(State::default(), |mut virtual_overseer| async move {
 		let overseer = &mut virtual_overseer;
-		// setup the vine
-		setup_peer_with_view(overseer, vine, view![hash]).await;
+		// setup the peer
+		setup_peer_with_view(overseer, peer, view![hash]).await;
 
 		// new block `hash_a` with 1 candidates
 		let meta = BlockApprovalMeta {
@@ -965,7 +965,7 @@ fn import_remotely_then_locally() {
 		let cert = fake_assignment_cert(hash, validator_index);
 		let assignments = vec![(cert.clone(), candidate_index)];
 		let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments.clone());
-		send_message_from_peer(overseer, vine, msg).await;
+		send_message_from_peer(overseer, peer, msg).await;
 
 		// send an `Accept` message from the Approval Voting subsystem
 		assert_matches!(
@@ -981,7 +981,7 @@ fn import_remotely_then_locally() {
 			}
 		);
 
-		expect_reputation_change(overseer, vine, BENEFIT_VALID_MESSAGE_FIRST).await;
+		expect_reputation_change(overseer, peer, BENEFIT_VALID_MESSAGE_FIRST).await;
 
 		// import the same assignment locally
 		overseer_send(
@@ -1000,7 +1000,7 @@ fn import_remotely_then_locally() {
 			signature: dummy_signature(),
 		};
 		let msg = protocol_v1::ApprovalDistributionMessage::Approvals(vec![approval.clone()]);
-		send_message_from_peer(overseer, vine, msg).await;
+		send_message_from_peer(overseer, peer, msg).await;
 
 		assert_matches!(
 			overseer_recv(overseer).await,
@@ -1012,7 +1012,7 @@ fn import_remotely_then_locally() {
 				tx.send(ApprovalCheckResult::Accepted).unwrap();
 			}
 		);
-		expect_reputation_change(overseer, vine, BENEFIT_VALID_MESSAGE_FIRST).await;
+		expect_reputation_change(overseer, peer, BENEFIT_VALID_MESSAGE_FIRST).await;
 
 		// import the same approval locally
 		overseer_send(overseer, ApprovalDistributionMessage::DistributeApproval(approval)).await;
@@ -1027,7 +1027,7 @@ fn sends_assignments_even_when_state_is_approved() {
 	let peer_a = PeerId::random();
 	let parent_hash = Hash::repeat_byte(0xFF);
 	let hash = Hash::repeat_byte(0xAA);
-	let vine = &peer_a;
+	let peer = &peer_a;
 
 	let _ = test_harness(State::default(), |mut virtual_overseer| async move {
 		let overseer = &mut virtual_overseer;
@@ -1065,8 +1065,8 @@ fn sends_assignments_even_when_state_is_approved() {
 		overseer_send(overseer, ApprovalDistributionMessage::DistributeApproval(approval.clone()))
 			.await;
 
-		// connect the vine.
-		setup_peer_with_view(overseer, vine, view![hash]).await;
+		// connect the peer.
+		setup_peer_with_view(overseer, peer, view![hash]).await;
 
 		let assignments = vec![(cert.clone(), candidate_index)];
 		let approvals = vec![approval.clone()];
@@ -1079,7 +1079,7 @@ fn sends_assignments_even_when_state_is_approved() {
 					protocol_v1::ApprovalDistributionMessage::Assignments(sent_assignments)
 				))
 			)) => {
-				assert_eq!(peers, vec![vine.clone()]);
+				assert_eq!(peers, vec![peer.clone()]);
 				assert_eq!(sent_assignments, assignments);
 			}
 		);
@@ -1092,7 +1092,7 @@ fn sends_assignments_even_when_state_is_approved() {
 					protocol_v1::ApprovalDistributionMessage::Approvals(sent_approvals)
 				))
 			)) => {
-				assert_eq!(peers, vec![vine.clone()]);
+				assert_eq!(peers, vec![peer.clone()]);
 				assert_eq!(sent_approvals, approvals);
 			}
 		);
@@ -1102,9 +1102,9 @@ fn sends_assignments_even_when_state_is_approved() {
 	});
 }
 
-/// <https://github.com/paritytech/vine/pull/5089>
+/// <https://github.com/paritytech/polkadot/pull/5089>
 ///
-/// 1. Receive remote vine view update with an unknown head
+/// 1. Receive remote peer view update with an unknown head
 /// 2. Receive assignments for that unknown head
 /// 3. Update our view and import the new block
 /// 4. Expect that no reputation with `COST_UNEXPECTED_MESSAGE` is applied
@@ -1116,7 +1116,7 @@ fn race_condition_in_local_vs_remote_view_update() {
 
 	let _ = test_harness(State::default(), |mut virtual_overseer| async move {
 		let overseer = &mut virtual_overseer;
-		let vine = &peer_a;
+		let peer = &peer_a;
 
 		// Test a small number of candidates
 		let candidates_count = 1;
@@ -1129,8 +1129,8 @@ fn race_condition_in_local_vs_remote_view_update() {
 			session: 1,
 		};
 
-		// This will send a vine view that is ahead of our view
-		setup_peer_with_view(overseer, vine, view![hash_b]).await;
+		// This will send a peer view that is ahead of our view
+		setup_peer_with_view(overseer, peer, view![hash_b]).await;
 
 		// Send our view update to include a new head
 		overseer_send(
@@ -1151,7 +1151,7 @@ fn race_condition_in_local_vs_remote_view_update() {
 			.collect();
 
 		let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments.clone());
-		send_message_from_peer(overseer, vine, msg.clone()).await;
+		send_message_from_peer(overseer, peer, msg.clone()).await;
 
 		// This will handle pending messages being processed
 		let msg = ApprovalDistributionMessage::NewBlocks(vec![meta]);
@@ -1159,7 +1159,7 @@ fn race_condition_in_local_vs_remote_view_update() {
 
 		for i in 0..candidates_count {
 			// Previously, this has caused out-of-view assignments/approvals
-			//expect_reputation_change(overseer, vine, COST_UNEXPECTED_MESSAGE).await;
+			//expect_reputation_change(overseer, peer, COST_UNEXPECTED_MESSAGE).await;
 
 			assert_matches!(
 				overseer_recv(overseer).await,
@@ -1175,7 +1175,7 @@ fn race_condition_in_local_vs_remote_view_update() {
 			);
 
 			// Since we have a valid statement pending, this should always occur
-			expect_reputation_change(overseer, vine, BENEFIT_VALID_MESSAGE_FIRST).await;
+			expect_reputation_change(overseer, peer, BENEFIT_VALID_MESSAGE_FIRST).await;
 		}
 		virtual_overseer
 	});
@@ -1193,8 +1193,8 @@ fn propagates_locally_generated_assignment_to_both_dimensions() {
 		let overseer = &mut virtual_overseer;
 
 		// Connect all peers.
-		for (vine, _) in &peers {
-			setup_peer_with_view(overseer, vine, view![hash]).await;
+		for (peer, _) in &peers {
+			setup_peer_with_view(overseer, peer, view![hash]).await;
 		}
 
 		// Set up a gossip topology.
@@ -1258,7 +1258,7 @@ fn propagates_locally_generated_assignment_to_both_dimensions() {
 				for &i in &expected_indices {
 					assert!(
 						sent_peers.contains(&peers[i].0),
-						"Message not sent to expected vine {}",
+						"Message not sent to expected peer {}",
 						i,
 					);
 				}
@@ -1298,8 +1298,8 @@ fn propagates_assignments_along_unshared_dimension() {
 		let overseer = &mut virtual_overseer;
 
 		// Connect all peers.
-		for (vine, _) in &peers {
-			setup_peer_with_view(overseer, vine, view![hash]).await;
+		for (peer, _) in &peers {
+			setup_peer_with_view(overseer, peer, view![hash]).await;
 		}
 
 		// Set up a gossip topology.
@@ -1333,7 +1333,7 @@ fn propagates_assignments_along_unshared_dimension() {
 
 			let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments.clone());
 
-			// Issuer of the message is important, not the vine we receive from.
+			// Issuer of the message is important, not the peer we receive from.
 			// 99 deliberately chosen because it's not in X or Y.
 			send_message_from_peer(overseer, &peers[99].0, msg).await;
 			assert_matches!(
@@ -1362,7 +1362,7 @@ fn propagates_assignments_along_unshared_dimension() {
 					for &i in &expected_y {
 						assert!(
 							sent_peers.contains(&peers[i].0),
-							"Message not sent to expected vine {}",
+							"Message not sent to expected peer {}",
 							i,
 						);
 					}
@@ -1382,7 +1382,7 @@ fn propagates_assignments_along_unshared_dimension() {
 
 			let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments.clone());
 
-			// Issuer of the message is important, not the vine we receive from.
+			// Issuer of the message is important, not the peer we receive from.
 			// 99 deliberately chosen because it's not in X or Y.
 			send_message_from_peer(overseer, &peers[99].0, msg).await;
 			assert_matches!(
@@ -1411,7 +1411,7 @@ fn propagates_assignments_along_unshared_dimension() {
 					for &i in &expected_x {
 						assert!(
 							sent_peers.contains(&peers[i].0),
-							"Message not sent to expected vine {}",
+							"Message not sent to expected peer {}",
 							i,
 						);
 					}
@@ -1439,9 +1439,9 @@ fn propagates_to_required_after_connect() {
 		let omitted = [0, 10, 50, 51];
 
 		// Connect all peers except omitted.
-		for (i, (vine, _)) in peers.iter().enumerate() {
+		for (i, (peer, _)) in peers.iter().enumerate() {
 			if !omitted.contains(&i) {
-				setup_peer_with_view(overseer, vine, view![hash]).await;
+				setup_peer_with_view(overseer, peer, view![hash]).await;
 			}
 		}
 
@@ -1506,7 +1506,7 @@ fn propagates_to_required_after_connect() {
 				for &i in &expected_indices {
 					assert!(
 						sent_peers.contains(&peers[i].0),
-						"Message not sent to expected vine {}",
+						"Message not sent to expected peer {}",
 						i,
 					);
 				}
@@ -1578,8 +1578,8 @@ fn sends_to_more_peers_after_getting_topology() {
 		let overseer = &mut virtual_overseer;
 
 		// Connect all peers except omitted.
-		for (vine, _) in &peers {
-			setup_peer_with_view(overseer, vine, view![hash]).await;
+		for (peer, _) in &peers {
+			setup_peer_with_view(overseer, peer, view![hash]).await;
 		}
 
 		// new block `hash_a` with 1 candidates
@@ -1630,8 +1630,8 @@ fn sends_to_more_peers_after_getting_topology() {
 			)) => {
 				// Only sends to random peers.
 				assert_eq!(sent_peers.len(), 4);
-				for vine in &sent_peers {
-					let i = peers.iter().position(|p| vine == &p.0).unwrap();
+				for peer in &sent_peers {
+					let i = peers.iter().position(|p| peer == &p.0).unwrap();
 					// Random gossip before topology can send to topology-targeted peers.
 					// Remove them from the expected indices so we don't expect
 					// them to get the messages again after the assignment.
@@ -1730,8 +1730,8 @@ fn originator_aggression_l1() {
 		let overseer = &mut virtual_overseer;
 
 		// Connect all peers except omitted.
-		for (vine, _) in &peers {
-			setup_peer_with_view(overseer, vine, view![hash]).await;
+		for (peer, _) in &peers {
+			setup_peer_with_view(overseer, peer, view![hash]).await;
 		}
 
 		// new block `hash_a` with 1 candidates
@@ -1817,6 +1817,9 @@ fn originator_aggression_l1() {
 					session: 1,
 				};
 
+				let msg = ApprovalDistributionMessage::ApprovalCheckingLagUpdate(level + 1);
+				overseer_send(overseer, msg).await;
+
 				let msg = ApprovalDistributionMessage::NewBlocks(vec![meta]);
 				overseer_send(overseer, msg).await;
 
@@ -1888,8 +1891,8 @@ fn non_originator_aggression_l1() {
 		let overseer = &mut virtual_overseer;
 
 		// Connect all peers except omitted.
-		for (vine, _) in &peers {
-			setup_peer_with_view(overseer, vine, view![hash]).await;
+		for (peer, _) in &peers {
+			setup_peer_with_view(overseer, peer, view![hash]).await;
 		}
 
 		// new block `hash_a` with 1 candidates
@@ -1921,7 +1924,7 @@ fn non_originator_aggression_l1() {
 		let assignments = vec![(cert.clone(), candidate_index)];
 		let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments.clone());
 
-		// Issuer of the message is important, not the vine we receive from.
+		// Issuer of the message is important, not the peer we receive from.
 		// 99 deliberately chosen because it's not in X or Y.
 		send_message_from_peer(overseer, &peers[99].0, msg).await;
 		assert_matches!(
@@ -1993,8 +1996,8 @@ fn non_originator_aggression_l2() {
 		let overseer = &mut virtual_overseer;
 
 		// Connect all peers except omitted.
-		for (vine, _) in &peers {
-			setup_peer_with_view(overseer, vine, view![hash]).await;
+		for (peer, _) in &peers {
+			setup_peer_with_view(overseer, peer, view![hash]).await;
 		}
 
 		// new block `hash_a` with 1 candidates
@@ -2026,7 +2029,7 @@ fn non_originator_aggression_l2() {
 		let assignments = vec![(cert.clone(), candidate_index)];
 		let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments.clone());
 
-		// Issuer of the message is important, not the vine we receive from.
+		// Issuer of the message is important, not the peer we receive from.
 		// 99 deliberately chosen because it's not in X or Y.
 		send_message_from_peer(overseer, &peers[99].0, msg).await;
 		assert_matches!(
@@ -2071,6 +2074,9 @@ fn non_originator_aggression_l2() {
 					session: 1,
 				};
 
+				let msg = ApprovalDistributionMessage::ApprovalCheckingLagUpdate(level + 1);
+				overseer_send(overseer, msg).await;
+
 				let msg = ApprovalDistributionMessage::NewBlocks(vec![meta]);
 				overseer_send(overseer, msg).await;
 
@@ -2097,6 +2103,10 @@ fn non_originator_aggression_l2() {
 					session: 1,
 				};
 
+				let msg = ApprovalDistributionMessage::ApprovalCheckingLagUpdate(
+					aggression_l1_threshold + level + 1,
+				);
+				overseer_send(overseer, msg).await;
 				let msg = ApprovalDistributionMessage::NewBlocks(vec![meta]);
 				overseer_send(overseer, msg).await;
 
@@ -2152,8 +2162,8 @@ fn resends_messages_periodically() {
 		let overseer = &mut virtual_overseer;
 
 		// Connect all peers.
-		for (vine, _) in &peers {
-			setup_peer_with_view(overseer, vine, view![hash]).await;
+		for (peer, _) in &peers {
+			setup_peer_with_view(overseer, peer, view![hash]).await;
 		}
 
 		// Set up a gossip topology.
@@ -2186,7 +2196,7 @@ fn resends_messages_periodically() {
 		{
 			let msg = protocol_v1::ApprovalDistributionMessage::Assignments(assignments.clone());
 
-			// Issuer of the message is important, not the vine we receive from.
+			// Issuer of the message is important, not the peer we receive from.
 			// 99 deliberately chosen because it's not in X or Y.
 			send_message_from_peer(overseer, &peers[99].0, msg).await;
 			assert_matches!(
@@ -2215,7 +2225,7 @@ fn resends_messages_periodically() {
 					for &i in &expected_y {
 						assert!(
 							sent_peers.contains(&peers[i].0),
-							"Message not sent to expected vine {}",
+							"Message not sent to expected peer {}",
 							i,
 						);
 					}
@@ -2241,6 +2251,8 @@ fn resends_messages_periodically() {
 						session: 1,
 					};
 
+					let msg = ApprovalDistributionMessage::ApprovalCheckingLagUpdate(2);
+					overseer_send(overseer, msg).await;
 					let msg = ApprovalDistributionMessage::NewBlocks(vec![meta]);
 					overseer_send(overseer, msg).await;
 
@@ -2278,7 +2290,7 @@ fn resends_messages_periodically() {
 }
 
 fn batch_test_round(message_count: usize) {
-	use vine_node_subsystem::SubsystemContext;
+	use polkadot_node_subsystem::SubsystemContext;
 	let pool = sp_core::testing::TaskExecutor::new();
 	let mut state = State::default();
 
@@ -2305,9 +2317,9 @@ fn batch_test_round(message_count: usize) {
 			})
 			.collect();
 
-		let vine = PeerId::random();
-		send_assignments_batched(&mut sender, assignments.clone(), vine).await;
-		send_approvals_batched(&mut sender, approvals.clone(), vine).await;
+		let peer = PeerId::random();
+		send_assignments_batched(&mut sender, assignments.clone(), peer).await;
+		send_approvals_batched(&mut sender, approvals.clone(), peer).await;
 
 		// Check expected assignments batches.
 		for assignment_index in (0..assignments.len()).step_by(super::MAX_ASSIGNMENT_BATCH_SIZE) {

@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use futures::{channel::oneshot, prelude::Future};
 
@@ -21,7 +21,7 @@ use parity_scale_codec::{Decode, Encode, Error as DecodingError};
 use sc_network as network;
 use sc_network::PeerId;
 
-use vine_primitives::v2::AuthorityDiscoveryId;
+use polkadot_primitives::AuthorityDiscoveryId;
 
 use super::{v1, IsRequest, Protocol};
 
@@ -113,14 +113,14 @@ impl RequestError {
 /// about responses/errors.
 ///
 /// When using `Recipient::Peer`, keep in mind that no address (as in IP address and port) might
-/// be known for that specific vine. You are encouraged to use `Peer` for peers that you are
+/// be known for that specific peer. You are encouraged to use `Peer` for peers that you are
 /// expected to be already connected to.
 /// When using `Recipient::Authority`, the addresses can be found thanks to the authority
 /// discovery system.
 #[derive(Debug)]
 pub struct OutgoingRequest<Req> {
 	/// Intended recipient of this request.
-	pub vine: Recipient,
+	pub peer: Recipient,
 	/// The actual request to send over the wire.
 	pub payload: Req,
 	/// Sender which is used by networking to get us back a response.
@@ -130,7 +130,7 @@ pub struct OutgoingRequest<Req> {
 /// Potential recipients of an outgoing request.
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]
 pub enum Recipient {
-	/// Recipient is a regular vine and we know its vine id.
+	/// Recipient is a regular peer and we know its peer id.
 	Peer(PeerId),
 	/// Recipient is a validator, we address it via this `AuthorityDiscoveryId`.
 	Authority(AuthorityDiscoveryId),
@@ -149,11 +149,11 @@ where
 	/// It will contain a sender that is used by the networking for sending back responses. The
 	/// connected receiver is returned as the second element in the returned tuple.
 	pub fn new(
-		vine: Recipient,
+		peer: Recipient,
 		payload: Req,
 	) -> (Self, impl Future<Output = OutgoingResult<Req::Response>>) {
 		let (tx, rx) = oneshot::channel();
-		let r = Self { vine, payload, pending_response: tx };
+		let r = Self { peer, payload, pending_response: tx };
 		(r, receive_response::<Req>(rx))
 	}
 
@@ -162,8 +162,8 @@ where
 	/// As this throws away type information, we also return the `Protocol` this encoded request
 	/// adheres to.
 	pub fn encode_request(self) -> (Protocol, OutgoingRequest<Vec<u8>>) {
-		let OutgoingRequest { vine, payload, pending_response } = self;
-		let encoded = OutgoingRequest { vine, payload: payload.encode(), pending_response };
+		let OutgoingRequest { peer, payload, pending_response } = self;
+		let encoded = OutgoingRequest { peer, payload: payload.encode(), pending_response };
 		(Req::PROTOCOL, encoded)
 	}
 }

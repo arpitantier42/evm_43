@@ -13,7 +13,7 @@ REPO=$(echo "$grv" | cut -d ' ' -f1 | cut -d$'\t' -f2 | sed 's/.*github.com\/\(.
 echo "[+] Detected repo: $REPO"
 
 BRANCH=$(git branch --show-current)
-if ! [[ "$BRANCH" =~ ^release.*$ || "$BRANCH" =~ ^vine.*$ ]]; then
+if ! [[ "$BRANCH" =~ ^release.*$ || "$BRANCH" =~ ^polkadot.*$ ]]; then
     echo "This script is meant to run only on a RELEASE branch."
     echo "Try one of the following branch:"
     git branch -r --format "%(refname:short)" --sort=-committerdate | grep -Ei '/?release' | head
@@ -48,12 +48,12 @@ get_release_branch() {
     repo=$1
     version=$2
     case $repo in
-        vine)
+        polkadot)
             echo "release-v$version"
             ;;
 
         substrate)
-            echo "vine-v$version"
+            echo "polkadot-v$version"
             ;;
 
         *)
@@ -63,7 +63,7 @@ get_release_branch() {
     esac
 }
 
-# repo = substrate / vine
+# repo = substrate / polkadot
 check_release_branch_repo() {
     repo=$1
     branch=$2
@@ -87,14 +87,14 @@ check_release_branch_repo() {
 # Check a release branch
 check_release_branches() {
     SUBSTRATE_BRANCH=$1
-    peer_BRANCH=$2
+    POLKADOT_BRANCH=$2
 
     check_release_branch_repo substrate $SUBSTRATE_BRANCH
     ret_a1=$?
 
     ret_b1=0
-    if [ $peer_BRANCH ]; then
-        check_release_branch_repo vine $peer_BRANCH
+    if [ $POLKADOT_BRANCH ]; then
+        check_release_branch_repo polkadot $POLKADOT_BRANCH
         ret_b1=$?
     fi
 
@@ -107,17 +107,17 @@ VERSION=$(get_version $BRANCH)
 echo "[+] Target version: v$VERSION"
 
 case $REPO in
-    vine)
+    polkadot)
         substrate=$(get_release_branch substrate $VERSION)
 
         check_release_branches $substrate
         ;;
 
     cumulus)
-        vine=$(get_release_branch vine $VERSION)
+        polkadot=$(get_release_branch polkadot $VERSION)
         substrate=$(get_release_branch substrate $VERSION)
 
-        check_release_branches $substrate $vine
+        check_release_branches $substrate $polkadot
         ;;
 
     *)

@@ -1,22 +1,23 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::configuration::*;
 use frame_benchmarking::{benchmarks, BenchmarkError, BenchmarkResult};
 use frame_system::RawOrigin;
+use primitives::{ExecutorParam, ExecutorParams, PvfExecTimeoutKind, PvfPrepTimeoutKind};
 use sp_runtime::traits::One;
 
 benchmarks! {
@@ -26,8 +27,6 @@ benchmarks! {
 
 	set_config_with_option_u32 {}: set_max_validators(RawOrigin::Root, Some(10))
 
-	set_config_with_weight {}: set_ump_service_total_weight(RawOrigin::Root, Weight::from_ref_time(3_000_000))
-
 	set_hrmp_open_request_ttl {}: {
 		Err(BenchmarkError::Override(
 			BenchmarkResult::from_weight(T::BlockWeights::get().max_block)
@@ -35,6 +34,18 @@ benchmarks! {
 	}
 
 	set_config_with_balance {}: set_hrmp_sender_deposit(RawOrigin::Root, 100_000_000_000)
+
+	set_config_with_executor_params {}: set_executor_params(RawOrigin::Root, ExecutorParams::from(&[
+		ExecutorParam::MaxMemoryPages(2080),
+		ExecutorParam::StackLogicalMax(65536),
+		ExecutorParam::StackNativeMax(256 * 1024 * 1024),
+		ExecutorParam::WasmExtBulkMemory,
+		ExecutorParam::PrecheckingMaxMemory(2 * 1024 * 1024 * 1024),
+		ExecutorParam::PvfPrepTimeout(PvfPrepTimeoutKind::Precheck, 60_000),
+		ExecutorParam::PvfPrepTimeout(PvfPrepTimeoutKind::Lenient, 360_000),
+		ExecutorParam::PvfExecTimeout(PvfExecTimeoutKind::Backing, 2_000),
+		ExecutorParam::PvfExecTimeout(PvfExecTimeoutKind::Approval, 12_000),
+	][..]))
 
 	impl_benchmark_test_suite!(
 		Pallet,

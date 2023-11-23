@@ -10,12 +10,12 @@ cd $PROJECT_ROOT
 # Find the current version from Cargo.toml
 VERSION=`grep "^version" ./cli/Cargo.toml | egrep -o "([0-9\.]+-?[0-9]+)"`
 GITUSER=parity
-GITREPO=vine
+GITREPO=polkadot
 
 # Build the image
 echo "Building ${GITUSER}/${GITREPO}:latest docker image, hang on!"
 time docker build \
-    -f ./scripts/ci/dockerfiles/vine/peer_builder.Dockerfile \
+    -f ./scripts/ci/dockerfiles/polkadot/polkadot_builder.Dockerfile \
     -t ${GITUSER}/${GITREPO}:latest \
     -t ${GITUSER}/${GITREPO}:v${VERSION} \
     .

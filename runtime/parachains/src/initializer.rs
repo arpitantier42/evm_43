@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! This module is responsible for maintaining a consistent initialization order for all other
 //! parachains modules. It's also responsible for finalization and session change notifications.
@@ -22,7 +22,7 @@
 use crate::{
 	configuration::{self, HostConfiguration},
 	disputes::{self, DisputesHandler as _, SlashingHandler as _},
-	dmp, hrmp, inclusion, paras, scheduler, session_info, shared, ump,
+	dmp, hrmp, inclusion, paras, scheduler, session_info, shared,
 };
 use frame_support::{
 	traits::{OneSessionHandler, Randomness},
@@ -30,7 +30,7 @@ use frame_support::{
 };
 use frame_system::limits::BlockWeights;
 use parity_scale_codec::{Decode, Encode};
-use primitives::v2::{BlockNumber, ConsensusLog, SessionIndex, ValidatorId};
+use primitives::{BlockNumber, ConsensusLog, SessionIndex, ValidatorId};
 use scale_info::TypeInfo;
 use sp_std::prelude::*;
 
@@ -99,7 +99,6 @@ pub mod pallet {
 	use frame_system::pallet_prelude::*;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
@@ -114,7 +113,6 @@ pub mod pallet {
 		+ session_info::Config
 		+ disputes::Config
 		+ dmp::Config
-		+ ump::Config
 		+ hrmp::Config
 	{
 		/// A randomness beacon.
@@ -169,7 +167,6 @@ pub mod pallet {
 				T::DisputesHandler::initializer_initialize(now) +
 				T::SlashingHandler::initializer_initialize(now) +
 				dmp::Pallet::<T>::initializer_initialize(now) +
-				ump::Pallet::<T>::initializer_initialize(now) +
 				hrmp::Pallet::<T>::initializer_initialize(now);
 
 			HasInitialized::<T>::set(Some(()));
@@ -180,7 +177,6 @@ pub mod pallet {
 		fn on_finalize(now: T::BlockNumber) {
 			// reverse initialization order.
 			hrmp::Pallet::<T>::initializer_finalize();
-			ump::Pallet::<T>::initializer_finalize();
 			dmp::Pallet::<T>::initializer_finalize();
 			T::SlashingHandler::initializer_finalize();
 			T::DisputesHandler::initializer_finalize();
@@ -210,6 +206,7 @@ pub mod pallet {
 		/// Issue a signal to the consensus engine to forcibly act as though all parachain
 		/// blocks in all relay chain blocks up to and including the given number in the current
 		/// chain are valid and should be finalized.
+		#[pallet::call_index(0)]
 		#[pallet::weight((
 			<T as Config>::WeightInfo::force_approve(
 				frame_system::Pallet::<T>::digest().logs.len() as u32,
@@ -234,7 +231,7 @@ impl<T: Config> Pallet<T> {
 		let random_seed = {
 			let mut buf = [0u8; 32];
 			// TODO: audit usage of randomness API
-			// https://github.com/paritytech/vine/issues/2601
+			// https://github.com/paritytech/polkadot/issues/2601
 			let (random_hash, _) = T::Randomness::random(&b"paras"[..]);
 			let len = sp_std::cmp::min(32, random_hash.as_ref().len());
 			buf[..len].copy_from_slice(&random_hash.as_ref()[..len]);
@@ -263,12 +260,11 @@ impl<T: Config> Pallet<T> {
 
 		let outgoing_paras = paras::Pallet::<T>::initializer_on_new_session(&notification);
 		scheduler::Pallet::<T>::initializer_on_new_session(&notification);
-		inclusion::Pallet::<T>::initializer_on_new_session(&notification);
+		inclusion::Pallet::<T>::initializer_on_new_session(&notification, &outgoing_paras);
 		session_info::Pallet::<T>::initializer_on_new_session(&notification);
 		T::DisputesHandler::initializer_on_new_session(&notification);
 		T::SlashingHandler::initializer_on_new_session(session_index);
 		dmp::Pallet::<T>::initializer_on_new_session(&notification, &outgoing_paras);
-		ump::Pallet::<T>::initializer_on_new_session(&notification, &outgoing_paras);
 		hrmp::Pallet::<T>::initializer_on_new_session(&notification, &outgoing_paras);
 	}
 

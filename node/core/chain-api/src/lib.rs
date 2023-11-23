@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Implements the Chain API Subsystem
 //!
@@ -37,11 +37,11 @@ use futures::prelude::*;
 use sc_client_api::AuxStore;
 use sp_blockchain::HeaderBackend;
 
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	messages::ChainApiMessage, overseer, FromOrchestra, OverseerSignal, SpawnedSubsystem,
 	SubsystemError, SubsystemResult,
 };
-use vine_primitives::v2::{Block, BlockId};
+use polkadot_primitives::Block;
 
 mod metrics;
 use self::metrics::Metrics;
@@ -99,10 +99,7 @@ where
 				},
 				ChainApiMessage::BlockHeader(hash, response_channel) => {
 					let _timer = subsystem.metrics.time_block_header();
-					let result = subsystem
-						.client
-						.header(BlockId::Hash(hash))
-						.map_err(|e| e.to_string().into());
+					let result = subsystem.client.header(hash).map_err(|e| e.to_string().into());
 					subsystem.metrics.on_request(result.is_ok());
 					let _ = response_channel.send(result);
 				},
@@ -134,7 +131,7 @@ where
 					let mut hash = hash;
 
 					let next_parent = core::iter::from_fn(|| {
-						let maybe_header = subsystem.client.header(BlockId::Hash(hash));
+						let maybe_header = subsystem.client.header(hash);
 						match maybe_header {
 							// propagate the error
 							Err(e) => {

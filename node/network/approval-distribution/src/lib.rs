@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! [`ApprovalDistributionSubsystem`] implementation.
 //!
@@ -21,23 +21,24 @@
 #![warn(missing_docs)]
 
 use futures::{channel::oneshot, FutureExt as _};
-use vine_node_network_protocol::{
+use polkadot_node_jaeger as jaeger;
+use polkadot_node_network_protocol::{
 	self as net_protocol,
 	grid_topology::{RandomRouting, RequiredRouting, SessionGridTopologies, SessionGridTopology},
 	peer_set::MAX_NOTIFICATION_SIZE,
 	v1 as protocol_v1, PeerId, UnifiedReputationChange as Rep, Versioned, View,
 };
-use vine_node_primitives::approval::{
+use polkadot_node_primitives::approval::{
 	AssignmentCert, BlockApprovalMeta, IndirectAssignmentCert, IndirectSignedApprovalVote,
 };
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	messages::{
 		ApprovalCheckResult, ApprovalDistributionMessage, ApprovalVotingMessage,
 		AssignmentCheckResult, NetworkBridgeEvent, NetworkBridgeTxMessage,
 	},
-	overseer, ActiveLeavesUpdate, FromOrchestra, OverseerSignal, SpawnedSubsystem, SubsystemError,
+	overseer, FromOrchestra, OverseerSignal, SpawnedSubsystem, SubsystemError,
 };
-use vine_primitives::v2::{
+use polkadot_primitives::{
 	BlockNumber, CandidateIndex, Hash, SessionIndex, ValidatorIndex, ValidatorSignature,
 };
 use rand::{CryptoRng, Rng, SeedableRng};
@@ -123,12 +124,12 @@ struct AggressionConfig {
 }
 
 impl AggressionConfig {
-	/// Returns `true` if block is not too old depending on the aggression level
-	fn is_age_relevant(&self, block_age: BlockNumber) -> bool {
+	/// Returns `true` if lag is past threshold depending on the aggression level
+	fn should_trigger_aggression(&self, approval_checking_lag: BlockNumber) -> bool {
 		if let Some(t) = self.l1_threshold {
-			block_age >= t
+			approval_checking_lag >= t
 		} else if let Some(t) = self.resend_unfinalized_period {
-			block_age > 0 && block_age % t == 0
+			approval_checking_lag > 0 && approval_checking_lag % t == 0
 		} else {
 			false
 		}
@@ -180,6 +181,12 @@ struct State {
 
 	/// Config for aggression.
 	aggression_config: AggressionConfig,
+
+	/// HashMap from active leaves to spans
+	spans: HashMap<Hash, jaeger::PerLeafSpan>,
+
+	/// Current approval checking finality lag.
+	approval_checking_lag: BlockNumber,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -228,12 +235,12 @@ impl Knowledge {
 	}
 }
 
-/// Information that has been circulated to and from a vine.
+/// Information that has been circulated to and from a peer.
 #[derive(Debug, Clone, Default)]
 struct PeerKnowledge {
-	/// The knowledge we've sent to the vine.
+	/// The knowledge we've sent to the peer.
 	sent: Knowledge,
-	/// The knowledge we've received from the vine.
+	/// The knowledge we've received from the peer.
 	received: Knowledge,
 }
 
@@ -390,9 +397,18 @@ impl State {
 	) {
 		let mut new_hashes = HashSet::new();
 		for meta in &metas {
+			let mut span = self
+				.spans
+				.get(&meta.hash)
+				.map(|span| span.child(&"handle-new-blocks"))
+				.unwrap_or_else(|| jaeger::Span::new(meta.hash, &"handle-new-blocks"))
+				.with_string_tag("block-hash", format!("{:?}", meta.hash))
+				.with_stage(jaeger::Stage::ApprovalDistribution);
+
 			match self.blocks.entry(meta.hash) {
 				hash_map::Entry::Vacant(entry) => {
 					let candidates_count = meta.candidates.len();
+					span.add_uint_tag("candidates-count", candidates_count as u64);
 					let mut candidates = Vec::with_capacity(candidates_count);
 					candidates.resize_with(candidates_count, Default::default);
 
@@ -547,7 +563,7 @@ impl State {
 					target: LOG_TARGET,
 					peer_id = %peer_id,
 					num = assignments.len(),
-					"Processing assignments from a vine",
+					"Processing assignments from a peer",
 				);
 				for (assignment, claimed_index) in assignments.into_iter() {
 					if let Some(pending) = self.pending_known.get_mut(&assignment.block_hash) {
@@ -586,7 +602,7 @@ impl State {
 					target: LOG_TARGET,
 					peer_id = %peer_id,
 					num = approvals.len(),
-					"Processing approvals from a vine",
+					"Processing approvals from a peer",
 				);
 				for approval_vote in approvals.into_iter() {
 					if let Some(pending) = self.pending_known.get_mut(&approval_vote.block_hash) {
@@ -620,7 +636,7 @@ impl State {
 		}
 	}
 
-	// handle a vine view change: requires that the vine is already connected
+	// handle a peer view change: requires that the peer is already connected
 	// and has an entry in the `PeerData` struct.
 	async fn handle_peer_view_change<Context, R>(
 		&mut self,
@@ -638,7 +654,7 @@ impl State {
 			self.peer_views.get_mut(&peer_id).map(|d| std::mem::replace(d, view.clone()));
 		let old_finalized_number = old_view.map(|v| v.finalized_number).unwrap_or(0);
 
-		// we want to prune every block known_by vine up to (including) view.finalized_number
+		// we want to prune every block known_by peer up to (including) view.finalized_number
 		let blocks = &mut self.blocks;
 		// the `BTreeMap::range` is constrained by stored keys
 		// so the loop won't take ages if the new finalized_number skyrockets
@@ -690,6 +706,7 @@ impl State {
 			if let Some(block_entry) = self.blocks.remove(relay_block) {
 				self.topologies.dec_session_refs(block_entry.session);
 			}
+			self.spans.remove(&relay_block);
 		});
 
 		// If a block was finalized, this means we may need to move our aggression
@@ -735,7 +752,7 @@ impl State {
 		let message_kind = MessageKind::Assignment;
 
 		if let Some(peer_id) = source.peer_id() {
-			// check if our knowledge of the vine already contains this assignment
+			// check if our knowledge of the peer already contains this assignment
 			match entry.known_by.entry(peer_id) {
 				hash_map::Entry::Occupied(mut peer_knowledge) => {
 					let peer_knowledge = peer_knowledge.get_mut();
@@ -758,13 +775,13 @@ impl State {
 						target: LOG_TARGET,
 						?peer_id,
 						?message_subject,
-						"Assignment from a vine is out of view",
+						"Assignment from a peer is out of view",
 					);
 					modify_reputation(ctx.sender(), peer_id, COST_UNEXPECTED_MESSAGE).await;
 				},
 			}
 
-			// if the assignment is known to be valid, reward the vine
+			// if the assignment is known to be valid, reward the peer
 			if entry.knowledge.contains(&message_subject, message_kind) {
 				modify_reputation(ctx.sender(), peer_id, BENEFIT_VALID_MESSAGE).await;
 				if let Some(peer_knowledge) = entry.known_by.get_mut(&peer_id) {
@@ -811,7 +828,7 @@ impl State {
 				AssignmentCheckResult::AcceptedDuplicate => {
 					// "duplicate" assignments aren't necessarily equal.
 					// There is more than one way each validator can be assigned to each core.
-					// cf. https://github.com/paritytech/vine/pull/2160#discussion_r557628699
+					// cf. https://github.com/paritytech/polkadot/pull/2160#discussion_r557628699
 					if let Some(peer_knowledge) = entry.known_by.get_mut(&peer_id) {
 						peer_knowledge.received.insert(message_subject.clone(), message_kind);
 					}
@@ -840,7 +857,7 @@ impl State {
 						hash = ?block_hash,
 						?peer_id,
 						%error,
-						"Got a bad assignment from vine",
+						"Got a bad assignment from peer",
 					);
 					modify_reputation(ctx.sender(), peer_id, COST_INVALID_MESSAGE).await;
 					return
@@ -907,20 +924,20 @@ impl State {
 		let n_peers_total = self.peer_views.len();
 		let source_peer = source.peer_id();
 
-		let mut peer_filter = move |vine| {
-			if Some(vine) == source_peer.as_ref() {
+		let mut peer_filter = move |peer| {
+			if Some(peer) == source_peer.as_ref() {
 				return false
 			}
 
 			if let Some(true) = topology
 				.as_ref()
-				.map(|t| t.local_grid_neighbors().route_to_peer(required_routing, vine))
+				.map(|t| t.local_grid_neighbors().route_to_peer(required_routing, peer))
 			{
 				return true
 			}
 
 			// Note: at this point, we haven't received the message from any peers
-			// other than the source vine, and we just got it, so we haven't sent it
+			// other than the source peer, and we just got it, so we haven't sent it
 			// to any peers either.
 			let route_random = message_state.random_routing.sample(n_peers_total, rng);
 
@@ -933,10 +950,10 @@ impl State {
 
 		let peers = entry.known_by.keys().filter(|p| peer_filter(p)).cloned().collect::<Vec<_>>();
 
-		// Add the metadata of the assignment to the knowledge of each vine.
-		for vine in peers.iter() {
+		// Add the metadata of the assignment to the knowledge of each peer.
+		for peer in peers.iter() {
 			// we already filtered peers above, so this should always be Some
-			if let Some(peer_knowledge) = entry.known_by.get_mut(vine) {
+			if let Some(peer_knowledge) = entry.known_by.get_mut(peer) {
 				peer_knowledge.sent.insert(message_subject.clone(), message_kind);
 			}
 		}
@@ -1000,7 +1017,7 @@ impl State {
 				return
 			}
 
-			// check if our knowledge of the vine already contains this approval
+			// check if our knowledge of the peer already contains this approval
 			match entry.known_by.entry(peer_id) {
 				hash_map::Entry::Occupied(mut knowledge) => {
 					let peer_knowledge = knowledge.get_mut();
@@ -1023,13 +1040,13 @@ impl State {
 						target: LOG_TARGET,
 						?peer_id,
 						?message_subject,
-						"Approval from a vine is out of view",
+						"Approval from a peer is out of view",
 					);
 					modify_reputation(ctx.sender(), peer_id, COST_UNEXPECTED_MESSAGE).await;
 				},
 			}
 
-			// if the approval is known to be valid, reward the vine
+			// if the approval is known to be valid, reward the peer
 			if entry.knowledge.contains(&message_subject, message_kind) {
 				gum::trace!(target: LOG_TARGET, ?peer_id, ?message_subject, "Known approval");
 				modify_reputation(ctx.sender(), peer_id, BENEFIT_VALID_MESSAGE).await;
@@ -1076,7 +1093,7 @@ impl State {
 						target: LOG_TARGET,
 						?peer_id,
 						%error,
-						"Got a bad approval from vine",
+						"Got a bad approval from peer",
 					);
 					return
 				},
@@ -1161,28 +1178,28 @@ impl State {
 		};
 
 		// Dispatch a ApprovalDistributionV1Message::Approval(vote)
-		// to all peers required by the topology, with the exception of the source vine.
+		// to all peers required by the topology, with the exception of the source peer.
 
 		let topology = self.topologies.get_topology(entry.session);
 		let source_peer = source.peer_id();
 
 		let message_subject = &message_subject;
-		let peer_filter = move |vine, knowledge: &PeerKnowledge| {
-			if Some(vine) == source_peer.as_ref() {
+		let peer_filter = move |peer, knowledge: &PeerKnowledge| {
+			if Some(peer) == source_peer.as_ref() {
 				return false
 			}
 
 			// Here we're leaning on a few behaviors of assignment propagation:
-			//   1. At this point, the only vine we're aware of which has the approval
-			//      message is the source vine.
-			//   2. We have sent the assignment message to every vine in the required routing
-			//      which is aware of this block _unless_ the vine we originally received the
+			//   1. At this point, the only peer we're aware of which has the approval
+			//      message is the source peer.
+			//   2. We have sent the assignment message to every peer in the required routing
+			//      which is aware of this block _unless_ the peer we originally received the
 			//      assignment from was part of the required routing. In that case, we've sent
 			//      the assignment to all aware peers in the required routing _except_ the original
 			//      source of the assignment. Hence the `in_topology_check`.
 			//   3. Any randomly selected peers have been sent the assignment already.
 			let in_topology = topology
-				.map_or(false, |t| t.local_grid_neighbors().route_to_peer(required_routing, vine));
+				.map_or(false, |t| t.local_grid_neighbors().route_to_peer(required_routing, peer));
 			in_topology || knowledge.sent.contains(message_subject, MessageKind::Assignment)
 		};
 
@@ -1194,10 +1211,10 @@ impl State {
 			.cloned()
 			.collect::<Vec<_>>();
 
-		// Add the metadata of the assignment to the knowledge of each vine.
-		for vine in peers.iter() {
+		// Add the metadata of the assignment to the knowledge of each peer.
+		for peer in peers.iter() {
 			// we already filtered peers above, so this should always be Some
-			if let Some(entry) = entry.known_by.get_mut(vine) {
+			if let Some(entry) = entry.known_by.get_mut(peer) {
 				entry.sent.insert(message_subject.clone(), message_kind);
 			}
 		}
@@ -1230,6 +1247,14 @@ impl State {
 	) -> HashMap<ValidatorIndex, ValidatorSignature> {
 		let mut all_sigs = HashMap::new();
 		for (hash, index) in indices {
+			let _span = self
+				.spans
+				.get(&hash)
+				.map(|span| span.child("get-approval-signatures"))
+				.unwrap_or_else(|| jaeger::Span::new(&hash, "get-approval-signatures"))
+				.with_string_tag("block-hash", format!("{:?}", hash))
+				.with_stage(jaeger::Stage::ApprovalDistribution);
+
 			let block_entry = match self.blocks.get(&hash) {
 				None => {
 					gum::debug!(
@@ -1245,11 +1270,11 @@ impl State {
 			let candidate_entry = match block_entry.candidates.get(index as usize) {
 				None => {
 					gum::debug!(
-						target: LOG_TARGET,
-						?hash,
-						?index,
-						"`get_approval_signatures`: could not find candidate entry for given hash and index!"
-						);
+					target: LOG_TARGET,
+					?hash,
+					?index,
+					"`get_approval_signatures`: could not find candidate entry for given hash and index!"
+					);
 					continue
 				},
 				Some(e) => e,
@@ -1291,7 +1316,7 @@ impl State {
 					_ => break,
 				};
 
-				// Any vine which is in the `known_by` set has already been
+				// Any peer which is in the `known_by` set has already been
 				// sent all messages it's meant to get for that block and all
 				// in-scope prior blocks.
 				if entry.known_by.contains_key(&peer_id) {
@@ -1379,7 +1404,7 @@ impl State {
 				target: LOG_TARGET,
 				?peer_id,
 				num = assignments_to_send.len(),
-				"Sending assignments to unified vine",
+				"Sending assignments to unified peer",
 			);
 
 			send_assignments_batched(sender, assignments_to_send, peer_id).await;
@@ -1390,7 +1415,7 @@ impl State {
 				target: LOG_TARGET,
 				?peer_id,
 				num = approvals_to_send.len(),
-				"Sending approvals to unified vine",
+				"Sending approvals to unified peer",
 			);
 
 			send_approvals_batched(sender, approvals_to_send, peer_id).await;
@@ -1403,19 +1428,29 @@ impl State {
 		resend: Resend,
 		metrics: &Metrics,
 	) {
-		let min_age = self.blocks_by_number.iter().next().map(|(num, _)| num);
-		let max_age = self.blocks_by_number.iter().rev().next().map(|(num, _)| num);
 		let config = self.aggression_config.clone();
 
-		let (min_age, max_age) = match (min_age, max_age) {
-			(Some(min), Some(max)) => (min, max),
+		if !self.aggression_config.should_trigger_aggression(self.approval_checking_lag) {
+			gum::trace!(
+				target: LOG_TARGET,
+				approval_checking_lag = self.approval_checking_lag,
+				"Aggression not enabled",
+			);
+			return
+		}
+
+		let max_age = self.blocks_by_number.iter().rev().next().map(|(num, _)| num);
+
+		let max_age = match max_age {
+			Some(max) => *max,
 			_ => return, // empty.
 		};
 
-		let diff = max_age - min_age;
-		if !self.aggression_config.is_age_relevant(diff) {
-			return
-		}
+		// Since we have the approval checking lag, we need to set the `min_age` accordingly to
+		// enable aggresion for the oldest block that is not approved.
+		let min_age = max_age.saturating_sub(self.approval_checking_lag);
+
+		gum::debug!(target: LOG_TARGET, min_age, max_age, "Aggression enabled",);
 
 		adjust_required_routing_and_propagate(
 			ctx,
@@ -1454,20 +1489,21 @@ impl State {
 				// its descendants from being finalized. Waste minimal bandwidth
 				// this way. Also, disputes might prevent finality - again, nothing
 				// to waste bandwidth on newer blocks for.
-				&block_entry.number == min_age
+				block_entry.number == min_age
 			},
 			|required_routing, local, _| {
 				// It's a bit surprising not to have a topology at this age.
 				if *required_routing == RequiredRouting::PendingTopology {
 					gum::debug!(
 						target: LOG_TARGET,
-						age = ?diff,
+						lag = ?self.approval_checking_lag,
 						"Encountered old block pending gossip topology",
 					);
 					return
 				}
 
-				if config.l1_threshold.as_ref().map_or(false, |t| &diff >= t) {
+				if config.l1_threshold.as_ref().map_or(false, |t| &self.approval_checking_lag >= t)
+				{
 					// Message originator sends to everyone.
 					if local && *required_routing != RequiredRouting::All {
 						metrics.on_aggression_l1();
@@ -1475,7 +1511,8 @@ impl State {
 					}
 				}
 
-				if config.l2_threshold.as_ref().map_or(false, |t| &diff >= t) {
+				if config.l2_threshold.as_ref().map_or(false, |t| &self.approval_checking_lag >= t)
+				{
 					// Message originator sends to everyone. Everyone else sends to XY.
 					if !local && *required_routing != RequiredRouting::GridXY {
 						metrics.on_aggression_l2();
@@ -1515,7 +1552,7 @@ async fn adjust_required_routing_and_propagate<Context, BlockFilter, RoutingModi
 	let mut peer_approvals = HashMap::new();
 
 	// Iterate all blocks in the session, producing payloads
-	// for each connected vine.
+	// for each connected peer.
 	for (block_hash, block_entry) in blocks {
 		if !block_filter(block_entry) {
 			continue
@@ -1560,10 +1597,10 @@ async fn adjust_required_routing_and_propagate<Context, BlockFilter, RoutingModi
 					}
 				});
 
-			for (vine, peer_knowledge) in &mut block_entry.known_by {
+			for (peer, peer_knowledge) in &mut block_entry.known_by {
 				if !topology
 					.local_grid_neighbors()
-					.route_to_peer(message_state.required_routing, vine)
+					.route_to_peer(message_state.required_routing, peer)
 				{
 					continue
 				}
@@ -1571,7 +1608,7 @@ async fn adjust_required_routing_and_propagate<Context, BlockFilter, RoutingModi
 				if !peer_knowledge.contains(&message_subject, MessageKind::Assignment) {
 					peer_knowledge.sent.insert(message_subject.clone(), MessageKind::Assignment);
 					peer_assignments
-						.entry(*vine)
+						.entry(*peer)
 						.or_insert_with(Vec::new)
 						.push(assignment_message.clone());
 				}
@@ -1580,7 +1617,7 @@ async fn adjust_required_routing_and_propagate<Context, BlockFilter, RoutingModi
 					if !peer_knowledge.contains(&message_subject, MessageKind::Approval) {
 						peer_knowledge.sent.insert(message_subject.clone(), MessageKind::Approval);
 						peer_approvals
-							.entry(*vine)
+							.entry(*peer)
 							.or_insert_with(Vec::new)
 							.push(approval_message.clone());
 					}
@@ -1591,16 +1628,16 @@ async fn adjust_required_routing_and_propagate<Context, BlockFilter, RoutingModi
 
 	// Send messages in accumulated packets, assignments preceding approvals.
 
-	for (vine, assignments_packet) in peer_assignments {
-		send_assignments_batched(ctx.sender(), assignments_packet, vine).await;
+	for (peer, assignments_packet) in peer_assignments {
+		send_assignments_batched(ctx.sender(), assignments_packet, peer).await;
 	}
 
-	for (vine, approvals_packet) in peer_approvals {
-		send_approvals_batched(ctx.sender(), approvals_packet, vine).await;
+	for (peer, approvals_packet) in peer_approvals {
+		send_approvals_batched(ctx.sender(), approvals_packet, peer).await;
 	}
 }
 
-/// Modify the reputation of a vine based on its behavior.
+/// Modify the reputation of a peer based on its behavior.
 async fn modify_reputation(
 	sender: &mut impl overseer::ApprovalDistributionSenderTrait,
 	peer_id: PeerId,
@@ -1610,7 +1647,7 @@ async fn modify_reputation(
 		target: LOG_TARGET,
 		reputation = ?rep,
 		?peer_id,
-		"Reputation change for vine",
+		"Reputation change for peer",
 	);
 
 	sender.send_message(NetworkBridgeTxMessage::ReportPeer(peer_id, rep)).await;
@@ -1650,13 +1687,18 @@ impl ApprovalDistribution {
 			match message {
 				FromOrchestra::Communication { msg } =>
 					Self::handle_incoming(&mut ctx, state, msg, &self.metrics, rng).await,
-				FromOrchestra::Signal(OverseerSignal::ActiveLeaves(ActiveLeavesUpdate {
-					..
-				})) => {
+				FromOrchestra::Signal(OverseerSignal::ActiveLeaves(update)) => {
 					gum::trace!(target: LOG_TARGET, "active leaves signal (ignored)");
 					// the relay chain blocks relevant to the approval subsystems
 					// are those that are available, but not finalized yet
-					// actived and deactivated heads hence are irrelevant to this subsystem
+					// actived and deactivated heads hence are irrelevant to this subsystem, other than
+					// for tracing purposes.
+					if let Some(activated) = update.activated {
+						let head = activated.hash;
+						let approval_distribution_span =
+							jaeger::PerLeafSpan::new(activated.span, "approval-distribution");
+						state.spans.insert(head, approval_distribution_span);
+					}
 				},
 				FromOrchestra::Signal(OverseerSignal::BlockFinalized(_hash, number)) => {
 					gum::trace!(target: LOG_TARGET, number = %number, "finalized signal");
@@ -1682,6 +1724,14 @@ impl ApprovalDistribution {
 				state.handle_new_blocks(ctx, metrics, metas, rng).await;
 			},
 			ApprovalDistributionMessage::DistributeAssignment(cert, candidate_index) => {
+				let _span = state
+					.spans
+					.get(&cert.block_hash)
+					.map(|span| span.child("import-and-distribute-assignment"))
+					.unwrap_or_else(|| jaeger::Span::new(&cert.block_hash, "distribute-assignment"))
+					.with_string_tag("block-hash", format!("{:?}", cert.block_hash))
+					.with_stage(jaeger::Stage::ApprovalDistribution);
+
 				gum::debug!(
 					target: LOG_TARGET,
 					"Distributing our assignment on candidate (block={}, index={})",
@@ -1701,6 +1751,14 @@ impl ApprovalDistribution {
 					.await;
 			},
 			ApprovalDistributionMessage::DistributeApproval(vote) => {
+				let _span = state
+					.spans
+					.get(&vote.block_hash)
+					.map(|span| span.child("import-and-distribute-approval"))
+					.unwrap_or_else(|| jaeger::Span::new(&vote.block_hash, "distribute-approval"))
+					.with_string_tag("block-hash", format!("{:?}", vote.block_hash))
+					.with_stage(jaeger::Stage::ApprovalDistribution);
+
 				gum::debug!(
 					target: LOG_TARGET,
 					"Distributing our approval vote on candidate (block={}, index={})",
@@ -1720,6 +1778,10 @@ impl ApprovalDistribution {
 						"Sending back approval signatures failed, oneshot got closed"
 					);
 				}
+			},
+			ApprovalDistributionMessage::ApprovalCheckingLagUpdate(lag) => {
+				gum::debug!(target: LOG_TARGET, lag, "Received `ApprovalCheckingLagUpdate`");
+				state.approval_checking_lag = lag;
 			},
 		}
 	}
@@ -1766,7 +1828,7 @@ pub const MAX_APPROVAL_BATCH_SIZE: usize = ensure_size_not_zero(
 pub(crate) async fn send_assignments_batched(
 	sender: &mut impl overseer::ApprovalDistributionSenderTrait,
 	assignments: Vec<(IndirectAssignmentCert, CandidateIndex)>,
-	vine: PeerId,
+	peer: PeerId,
 ) {
 	let mut batches = assignments.into_iter().peekable();
 
@@ -1775,7 +1837,7 @@ pub(crate) async fn send_assignments_batched(
 
 		sender
 			.send_message(NetworkBridgeTxMessage::SendValidationMessage(
-				vec![vine],
+				vec![peer],
 				Versioned::V1(protocol_v1::ValidationProtocol::ApprovalDistribution(
 					protocol_v1::ApprovalDistributionMessage::Assignments(batch),
 				)),
@@ -1788,7 +1850,7 @@ pub(crate) async fn send_assignments_batched(
 pub(crate) async fn send_approvals_batched(
 	sender: &mut impl overseer::ApprovalDistributionSenderTrait,
 	approvals: Vec<IndirectSignedApprovalVote>,
-	vine: PeerId,
+	peer: PeerId,
 ) {
 	let mut batches = approvals.into_iter().peekable();
 
@@ -1797,7 +1859,7 @@ pub(crate) async fn send_approvals_batched(
 
 		sender
 			.send_message(NetworkBridgeTxMessage::SendValidationMessage(
-				vec![vine],
+				vec![peer],
 				Versioned::V1(protocol_v1::ValidationProtocol::ApprovalDistribution(
 					protocol_v1::ApprovalDistributionMessage::Approvals(batch),
 				)),

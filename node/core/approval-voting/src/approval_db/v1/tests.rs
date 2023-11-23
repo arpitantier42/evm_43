@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Tests for the aux-schema of approval voting.
 
@@ -21,8 +21,8 @@ use crate::{
 	backend::{Backend, OverlayedBackend},
 	ops::{add_block_entry, canonicalize, force_approve, NewCandidateInfo},
 };
-use vine_node_subsystem_util::database::Database;
-use vine_primitives::v2::Id as ParaId;
+use polkadot_node_subsystem_util::database::Database;
+use polkadot_primitives::Id as ParaId;
 use std::{collections::HashMap, sync::Arc};
 
 use ::test_helpers::{dummy_candidate_receipt, dummy_candidate_receipt_bad_sig, dummy_hash};
@@ -37,7 +37,7 @@ const TEST_CONFIG: Config =
 
 fn make_db() -> (DbBackend, Arc<dyn Database>) {
 	let db = kvdb_memorydb::create(NUM_COLUMNS);
-	let db = vine_node_subsystem_util::database::kvdb_impl::DbAdapter::new(db, &[]);
+	let db = polkadot_node_subsystem_util::database::kvdb_impl::DbAdapter::new(db, &[]);
 	let db_writer: Arc<dyn Database> = Arc::new(db);
 	(DbBackend::new(db_writer.clone(), TEST_CONFIG), db_writer)
 }
@@ -401,7 +401,7 @@ fn canonicalize_works() {
 			assert_eq!(entry.candidates.len(), with_candidates.len());
 
 			for x in with_candidates {
-				assert!(entry.candidates.iter().position(|&(_, ref c)| c == &x).is_some());
+				assert!(entry.candidates.iter().any(|(_, c)| c == &x));
 			}
 		}
 	};

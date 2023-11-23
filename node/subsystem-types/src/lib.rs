@@ -1,22 +1,22 @@
-// Copyright 2017-2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Subsystem trait definitions and message types.
 //!
-//! Node-side logic for vine is mostly comprised of Subsystems, which are discrete components
+//! Node-side logic for Polkadot is mostly comprised of Subsystems, which are discrete components
 //! that communicate via message-passing. They are coordinated by an overseer, provided by a
 //! separate crate.
 
@@ -24,7 +24,7 @@
 
 use std::{fmt, sync::Arc};
 
-pub use vine_primitives::v2::{BlockNumber, Hash};
+pub use polkadot_primitives::{BlockNumber, Hash};
 use smallvec::SmallVec;
 
 pub mod errors;
@@ -34,7 +34,7 @@ mod runtime_client;
 pub use runtime_client::RuntimeApiSubsystemClient;
 
 pub use jaeger::*;
-pub use vine_node_jaeger as jaeger;
+pub use polkadot_node_jaeger as jaeger;
 
 /// How many slots are stack-reserved for active leaves updates
 ///

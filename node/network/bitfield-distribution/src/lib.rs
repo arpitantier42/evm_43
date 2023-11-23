@@ -1,18 +1,18 @@
-// Copyright 2020-2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! The bitfield distribution
 //!
@@ -24,20 +24,20 @@
 
 use futures::{channel::oneshot, FutureExt};
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	self as net_protocol,
 	grid_topology::{
 		GridNeighbors, RandomRouting, RequiredRouting, SessionBoundGridTopologyStorage,
 	},
 	v1 as protocol_v1, OurView, PeerId, UnifiedReputationChange as Rep, Versioned, View,
 };
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	jaeger, messages::*, overseer, ActiveLeavesUpdate, FromOrchestra, OverseerSignal, PerLeafSpan,
 	SpawnedSubsystem, SubsystemError, SubsystemResult,
 };
-use vine_node_subsystem_util::{self as util};
+use polkadot_node_subsystem_util::{self as util};
 
-use vine_primitives::v2::{Hash, SignedAvailabilityBitfield, SigningContext, ValidatorId};
+use polkadot_primitives::{Hash, SignedAvailabilityBitfield, SigningContext, ValidatorId};
 use rand::{CryptoRng, Rng, SeedableRng};
 use std::collections::{HashMap, HashSet};
 
@@ -50,7 +50,7 @@ mod tests;
 
 const COST_SIGNATURE_INVALID: Rep = Rep::CostMajor("Bitfield signature invalid");
 const COST_VALIDATOR_INDEX_INVALID: Rep = Rep::CostMajor("Bitfield validator index invalid");
-const COST_MISSING_PEER_SESSION_KEY: Rep = Rep::CostMinor("Missing vine session key");
+const COST_MISSING_PEER_SESSION_KEY: Rep = Rep::CostMinor("Missing peer session key");
 const COST_NOT_IN_VIEW: Rep = Rep::CostMinor("Not interested in that parent hash");
 const COST_PEER_DUPLICATE_MESSAGE: Rep =
 	Rep::CostMinorRepeated("Peer sent the same message multiple times");
@@ -117,7 +117,7 @@ struct PerRelayParentData {
 	/// Avoid duplicate message transmission to our peers.
 	message_sent_to_peer: HashMap<PeerId, HashSet<ValidatorId>>,
 
-	/// Track messages that were already received by a vine
+	/// Track messages that were already received by a peer
 	/// to prevent flooding.
 	message_received_from_peer: HashMap<PeerId, HashSet<ValidatorId>>,
 
@@ -143,18 +143,18 @@ impl PerRelayParentData {
 	}
 
 	/// Determines if that particular message signed by a
-	/// validator is needed by the given vine.
+	/// validator is needed by the given peer.
 	fn message_from_validator_needed_by_peer(
 		&self,
-		vine: &PeerId,
+		peer: &PeerId,
 		signed_by: &ValidatorId,
 	) -> bool {
 		self.message_sent_to_peer
-			.get(vine)
+			.get(peer)
 			.map(|pubkeys| !pubkeys.contains(signed_by))
 			.unwrap_or(true) &&
 			self.message_received_from_peer
-				.get(vine)
+				.get(peer)
 				.map(|pubkeys| !pubkeys.contains(signed_by))
 				.unwrap_or(true)
 	}
@@ -272,16 +272,16 @@ impl BitfieldDistribution {
 	}
 }
 
-/// Modify the reputation of a vine based on its behavior.
+/// Modify the reputation of a peer based on its behavior.
 async fn modify_reputation(
 	sender: &mut impl overseer::BitfieldDistributionSenderTrait,
 	relay_parent: Hash,
-	vine: PeerId,
+	peer: PeerId,
 	rep: Rep,
 ) {
-	gum::trace!(target: LOG_TARGET, ?relay_parent, ?rep, %vine, "reputation change");
+	gum::trace!(target: LOG_TARGET, ?relay_parent, ?rep, %peer, "reputation change");
 
-	sender.send_message(NetworkBridgeTxMessage::ReportPeer(vine, rep)).await
+	sender.send_message(NetworkBridgeTxMessage::ReportPeer(peer, rep)).await
 }
 /// Distribute a given valid and signature checked bitfield message.
 ///
@@ -347,7 +347,7 @@ async fn handle_bitfield_distribution<Context>(
 
 /// Distribute a given valid and signature checked bitfield message.
 ///
-/// Can be originated by another subsystem or received via network from another vine.
+/// Can be originated by another subsystem or received via network from another peer.
 #[overseer::contextbounds(BitfieldDistribution, prefix=self::overseer)]
 async fn relay_message<Context>(
 	ctx: &mut Context,
@@ -378,13 +378,13 @@ async fn relay_message<Context>(
 	// pass on the bitfield distribution to all interested peers
 	let interested_peers = peer_views
 		.iter()
-		.filter_map(|(vine, view)| {
-			// check interest in the vine in this message's relay parent
+		.filter_map(|(peer, view)| {
+			// check interest in the peer in this message's relay parent
 			if view.contains(&message.relay_parent) {
 				let message_needed =
-					job_data.message_from_validator_needed_by_peer(&vine, &validator);
+					job_data.message_from_validator_needed_by_peer(&peer, &validator);
 				if message_needed {
-					let in_topology = topology_neighbors.route_to_peer(required_routing, &vine);
+					let in_topology = topology_neighbors.route_to_peer(required_routing, &peer);
 					let need_routing = in_topology || {
 						let route_random = random_routing.sample(total_peers, rng);
 						if route_random {
@@ -395,7 +395,7 @@ async fn relay_message<Context>(
 					};
 
 					if need_routing {
-						Some(*vine)
+						Some(*peer)
 					} else {
 						None
 					}
@@ -408,11 +408,11 @@ async fn relay_message<Context>(
 		})
 		.collect::<Vec<PeerId>>();
 
-	interested_peers.iter().for_each(|vine| {
-		// track the message as sent for this vine
+	interested_peers.iter().for_each(|peer| {
+		// track the message as sent for this peer
 		job_data
 			.message_sent_to_peer
-			.entry(*vine)
+			.entry(*peer)
 			.or_default()
 			.insert(validator.clone());
 	});
@@ -435,7 +435,7 @@ async fn relay_message<Context>(
 	}
 }
 
-/// Handle an incoming message from a vine.
+/// Handle an incoming message from a peer.
 #[overseer::contextbounds(BitfieldDistribution, prefix=self::overseer)]
 async fn process_incoming_peer_message<Context>(
 	ctx: &mut Context,
@@ -448,9 +448,9 @@ async fn process_incoming_peer_message<Context>(
 	let protocol_v1::BitfieldDistributionMessage::Bitfield(relay_parent, bitfield) = message;
 	gum::trace!(
 		target: LOG_TARGET,
-		vine = %origin,
+		peer = %origin,
 		?relay_parent,
-		"received bitfield gossip from vine"
+		"received bitfield gossip from peer"
 	);
 	// we don't care about this, not part of our view.
 	if !state.view.contains(&relay_parent) {
@@ -494,7 +494,7 @@ async fn process_incoming_peer_message<Context>(
 		return
 	};
 
-	// Check if the vine already sent us a message for the validator denoted in the message earlier.
+	// Check if the peer already sent us a message for the validator denoted in the message earlier.
 	// Must be done after validator index verification, in order to avoid storing an unbounded
 	// number of set entries.
 	let received_set = job_data.message_received_from_peer.entry(origin).or_default();
@@ -568,15 +568,15 @@ async fn handle_network_msg<Context>(
 	let _timer = metrics.time_handle_network_msg();
 
 	match bridge_message {
-		NetworkBridgeEvent::PeerConnected(vine, role, _, _) => {
-			gum::trace!(target: LOG_TARGET, ?vine, ?role, "Peer connected");
+		NetworkBridgeEvent::PeerConnected(peer, role, _, _) => {
+			gum::trace!(target: LOG_TARGET, ?peer, ?role, "Peer connected");
 			// insert if none already present
-			state.peer_views.entry(vine).or_default();
+			state.peer_views.entry(peer).or_default();
 		},
-		NetworkBridgeEvent::PeerDisconnected(vine) => {
-			gum::trace!(target: LOG_TARGET, ?vine, "Peer disconnected");
+		NetworkBridgeEvent::PeerDisconnected(peer) => {
+			gum::trace!(target: LOG_TARGET, ?peer, "Peer disconnected");
 			// get rid of superfluous data
-			state.peer_views.remove(&vine);
+			state.peer_views.remove(&peer);
 		},
 		NetworkBridgeEvent::NewGossipTopology(gossip_topology) => {
 			let session_index = gossip_topology.session;
@@ -601,7 +601,7 @@ async fn handle_network_msg<Context>(
 			);
 
 			for new_peer in newly_added {
-				// in case we already knew that vine in the past
+				// in case we already knew that peer in the past
 				// it might have had an existing view, we use to initialize
 				// and minimize the delta on `PeerViewChange` to be sent
 				if let Some(old_view) = state.peer_views.remove(&new_peer) {
@@ -645,7 +645,7 @@ fn handle_our_view_change(state: &mut ProtocolState, view: OurView) {
 }
 
 // Send the difference between two views which were not sent
-// to that particular vine.
+// to that particular peer.
 #[overseer::contextbounds(BitfieldDistribution, prefix=self::overseer)]
 async fn handle_peer_view_change<Context>(
 	ctx: &mut Context,
@@ -676,17 +676,17 @@ async fn handle_peer_view_change<Context>(
 		return
 	}
 
-	// Send all messages we've seen before and the vine is now interested
-	// in to that vine.
+	// Send all messages we've seen before and the peer is now interested
+	// in to that peer.
 	let delta_set: Vec<(ValidatorId, BitfieldGossipMessage)> = added
 		.into_iter()
 		.filter_map(|new_relay_parent_interest| {
 			if let Some(job_data) = state.per_relay_parent.get(&new_relay_parent_interest) {
 				// Send all jointly known messages for a validator (given the current relay parent)
-				// to the vine `origin`...
+				// to the peer `origin`...
 				let one_per_validator = job_data.one_per_validator.clone();
 				Some(one_per_validator.into_iter().filter(move |(validator, _message)| {
-					// ..except for the ones the vine already has.
+					// ..except for the ones the peer already has.
 					job_data.message_from_validator_needed_by_peer(&origin, validator)
 				}))
 			} else {

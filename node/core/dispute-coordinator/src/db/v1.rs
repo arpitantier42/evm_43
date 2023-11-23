@@ -1,25 +1,24 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! `V1` database for the dispute coordinator.
 
-use vine_node_primitives::DisputeStatus;
-use vine_node_subsystem::{SubsystemError, SubsystemResult};
-use vine_node_subsystem_util::database::{DBTransaction, Database};
-use vine_primitives::v2::{
+use polkadot_node_primitives::DisputeStatus;
+use polkadot_node_subsystem_util::database::{DBTransaction, Database};
+use polkadot_primitives::{
 	CandidateHash, CandidateReceipt, Hash, InvalidDisputeStatementKind, SessionIndex,
 	ValidDisputeStatementKind, ValidatorIndex, ValidatorSignature,
 };
@@ -49,7 +48,7 @@ const CLEANED_VOTES_WATERMARK_KEY: &[u8; 23] = b"cleaned-votes-watermark";
 ///
 /// 300 is with session duration of 1 hour and 30 parachains around <3_000_000 key purges in the worst
 /// case. Which is already quite a lot, at the same time we have around 21_000 sessions on
-/// . This means at 300 purged sessions per session, cleaning everything up will take
+/// Kusama. This means at 300 purged sessions per session, cleaning everything up will take
 /// around 3 days. Depending on how severe disk usage becomes, we might want to bump the batch
 /// size, at the cost of risking issues at session boundaries (performance).
 #[cfg(test)]
@@ -109,12 +108,12 @@ impl DbBackend {
 
 impl Backend for DbBackend {
 	/// Load the earliest session, if any.
-	fn load_earliest_session(&self) -> SubsystemResult<Option<SessionIndex>> {
+	fn load_earliest_session(&self) -> FatalResult<Option<SessionIndex>> {
 		load_earliest_session(&*self.inner, &self.config)
 	}
 
 	/// Load the recent disputes, if any.
-	fn load_recent_disputes(&self) -> SubsystemResult<Option<RecentDisputes>> {
+	fn load_recent_disputes(&self) -> FatalResult<Option<RecentDisputes>> {
 		load_recent_disputes(&*self.inner, &self.config)
 	}
 
@@ -123,7 +122,7 @@ impl Backend for DbBackend {
 		&self,
 		session: SessionIndex,
 		candidate_hash: &CandidateHash,
-	) -> SubsystemResult<Option<CandidateVotes>> {
+	) -> FatalResult<Option<CandidateVotes>> {
 		load_candidate_votes(&*self.inner, &self.config, session, candidate_hash)
 	}
 
@@ -222,9 +221,9 @@ pub struct CandidateVotes {
 	pub invalid: Vec<(InvalidDisputeStatementKind, ValidatorIndex, ValidatorSignature)>,
 }
 
-impl From<CandidateVotes> for vine_node_primitives::CandidateVotes {
-	fn from(db_votes: CandidateVotes) -> vine_node_primitives::CandidateVotes {
-		vine_node_primitives::CandidateVotes {
+impl From<CandidateVotes> for polkadot_node_primitives::CandidateVotes {
+	fn from(db_votes: CandidateVotes) -> polkadot_node_primitives::CandidateVotes {
+		polkadot_node_primitives::CandidateVotes {
 			candidate_receipt: db_votes.candidate_receipt,
 			valid: db_votes.valid.into_iter().map(|(kind, i, sig)| (i, (kind, sig))).collect(),
 			invalid: db_votes.invalid.into_iter().map(|(kind, i, sig)| (i, (kind, sig))).collect(),
@@ -232,8 +231,8 @@ impl From<CandidateVotes> for vine_node_primitives::CandidateVotes {
 	}
 }
 
-impl From<vine_node_primitives::CandidateVotes> for CandidateVotes {
-	fn from(primitive_votes: vine_node_primitives::CandidateVotes) -> CandidateVotes {
+impl From<polkadot_node_primitives::CandidateVotes> for CandidateVotes {
+	fn from(primitive_votes: polkadot_node_primitives::CandidateVotes) -> CandidateVotes {
 		CandidateVotes {
 			candidate_receipt: primitive_votes.candidate_receipt,
 			valid: primitive_votes
@@ -287,27 +286,27 @@ pub(crate) fn load_candidate_votes(
 	config: &ColumnConfiguration,
 	session: SessionIndex,
 	candidate_hash: &CandidateHash,
-) -> SubsystemResult<Option<CandidateVotes>> {
+) -> FatalResult<Option<CandidateVotes>> {
 	load_decode(db, config.col_dispute_data, &candidate_votes_key(session, candidate_hash))
-		.map_err(|e| SubsystemError::with_origin("dispute-coordinator", e))
+		.map_err(|e| FatalError::DbReadFailed(e))
 }
 
 /// Load the earliest session, if any.
 pub(crate) fn load_earliest_session(
 	db: &dyn Database,
 	config: &ColumnConfiguration,
-) -> SubsystemResult<Option<SessionIndex>> {
+) -> FatalResult<Option<SessionIndex>> {
 	load_decode(db, config.col_dispute_data, EARLIEST_SESSION_KEY)
-		.map_err(|e| SubsystemError::with_origin("dispute-coordinator", e))
+		.map_err(|e| FatalError::DbReadFailed(e))
 }
 
 /// Load the recent disputes, if any.
 pub(crate) fn load_recent_disputes(
 	db: &dyn Database,
 	config: &ColumnConfiguration,
-) -> SubsystemResult<Option<RecentDisputes>> {
+) -> FatalResult<Option<RecentDisputes>> {
 	load_decode(db, config.col_dispute_data, RECENT_DISPUTES_KEY)
-		.map_err(|e| SubsystemError::with_origin("dispute-coordinator", e))
+		.map_err(|e| FatalError::DbReadFailed(e))
 }
 
 /// Maybe prune data in the DB based on the provided session index.
@@ -321,7 +320,7 @@ pub(crate) fn load_recent_disputes(
 pub(crate) fn note_earliest_session(
 	overlay_db: &mut OverlayedBackend<'_, impl Backend>,
 	new_earliest_session: SessionIndex,
-) -> SubsystemResult<()> {
+) -> FatalResult<()> {
 	match overlay_db.load_earliest_session()? {
 		None => {
 			// First launch - write new-earliest.
@@ -372,12 +371,12 @@ mod tests {
 
 	use super::*;
 	use ::test_helpers::{dummy_candidate_receipt, dummy_hash};
-	use vine_node_primitives::DISPUTE_WINDOW;
-	use vine_primitives::v2::{Hash, Id as ParaId};
+	use polkadot_node_primitives::DISPUTE_WINDOW;
+	use polkadot_primitives::{Hash, Id as ParaId};
 
 	fn make_db() -> DbBackend {
 		let db = kvdb_memorydb::create(1);
-		let db = vine_node_subsystem_util::database::kvdb_impl::DbAdapter::new(db, &[0]);
+		let db = polkadot_node_subsystem_util::database::kvdb_impl::DbAdapter::new(db, &[0]);
 		let store = Arc::new(db);
 		let config = ColumnConfiguration { col_dispute_data: 0, col_session_data: 1 };
 		DbBackend::new(store, config, Metrics::default())

@@ -1,26 +1,26 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! All peersets and protocols used for parachains.
 
 use derive_more::Display;
-use vine_primitives::v2::Hash;
-use sc_network_common::{
+use polkadot_primitives::Hash;
+use sc_network::{
 	config::{NonDefaultSetConfig, SetConfig},
-	protocol::ProtocolName,
+	types::ProtocolName,
 };
 use std::{
 	collections::{hash_map::Entry, HashMap},
@@ -29,8 +29,8 @@ use std::{
 use strum::{EnumIter, IntoEnumIterator};
 
 /// The legacy protocol names. Only supported on version = 1.
-const LEGACY_VALIDATION_PROTOCOL_V1: &str = "/vine/validation/1";
-const LEGACY_COLLATION_PROTOCOL_V1: &str = "/vine/collation/1";
+const LEGACY_VALIDATION_PROTOCOL_V1: &str = "/polkadot/validation/1";
+const LEGACY_COLLATION_PROTOCOL_V1: &str = "/polkadot/collation/1";
 
 /// The legacy protocol version. Is always 1 for both validation & collation.
 const LEGACY_PROTOCOL_VERSION_V1: u32 = 1;
@@ -38,13 +38,13 @@ const LEGACY_PROTOCOL_VERSION_V1: u32 = 1;
 /// Max notification size is currently constant.
 pub const MAX_NOTIFICATION_SIZE: u64 = 100 * 1024;
 
-/// The vine-sets and thus the protocols which are used for the network.
+/// The peer-sets and thus the protocols which are used for the network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
 pub enum PeerSet {
-	/// The validation vine-set is responsible for all messages related to candidate validation and
+	/// The validation peer-set is responsible for all messages related to candidate validation and
 	/// communication among validators.
 	Validation,
-	/// The collation vine-set is used for validator<>collator communication.
+	/// The collation peer-set is used for validator<>collator communication.
 	Collation,
 }
 
@@ -60,7 +60,7 @@ pub enum IsAuthority {
 }
 
 impl PeerSet {
-	/// Get `sc_network` vine set configurations for each peerset on the default version.
+	/// Get `sc_network` peer set configurations for each peerset on the default version.
 	///
 	/// Those should be used in the network configuration to register the protocols with the
 	/// network service.
@@ -81,7 +81,7 @@ impl PeerSet {
 				fallback_names,
 				max_notification_size,
 				handshake: None,
-				set_config: sc_network_common::config::SetConfig {
+				set_config: SetConfig {
 					// we allow full nodes to connect to validators for gossip
 					// to ensure any `MIN_GOSSIP_PEERS` always include reserved peers
 					// we limit the amount of non-reserved slots to be less
@@ -89,7 +89,7 @@ impl PeerSet {
 					in_peers: super::MIN_GOSSIP_PEERS as u32 / 2 - 1,
 					out_peers: super::MIN_GOSSIP_PEERS as u32 / 2 - 1,
 					reserved_nodes: Vec::new(),
-					non_reserved_mode: sc_network_common::config::NonReservedPeerMode::Accept,
+					non_reserved_mode: sc_network::config::NonReservedPeerMode::Accept,
 				},
 			},
 			PeerSet::Collation => NonDefaultSetConfig {
@@ -98,21 +98,21 @@ impl PeerSet {
 				max_notification_size,
 				handshake: None,
 				set_config: SetConfig {
-					// Non-authority nodes don't need to accept incoming connections on this vine set:
+					// Non-authority nodes don't need to accept incoming connections on this peer set:
 					in_peers: if is_authority == IsAuthority::Yes { 100 } else { 0 },
 					out_peers: 0,
 					reserved_nodes: Vec::new(),
 					non_reserved_mode: if is_authority == IsAuthority::Yes {
-						sc_network_common::config::NonReservedPeerMode::Accept
+						sc_network::config::NonReservedPeerMode::Accept
 					} else {
-						sc_network_common::config::NonReservedPeerMode::Deny
+						sc_network::config::NonReservedPeerMode::Deny
 					},
 				},
 			},
 		}
 	}
 
-	/// Get the main protocol version for this vine set.
+	/// Get the main protocol version for this peer set.
 	///
 	/// Networking layer relies on `get_main_version()` being the version
 	/// of the main protocol name reported by [`PeerSetProtocolNames::get_main_name()`].
@@ -123,12 +123,12 @@ impl PeerSet {
 		}
 	}
 
-	/// Get the max notification size for this vine set.
+	/// Get the max notification size for this peer set.
 	pub fn get_max_notification_size(self, _: IsAuthority) -> u64 {
 		MAX_NOTIFICATION_SIZE
 	}
 
-	/// Get the vine set label for metrics reporting.
+	/// Get the peer set label for metrics reporting.
 	pub fn get_label(self) -> &'static str {
 		match self {
 			PeerSet::Validation => "validation",
@@ -157,7 +157,7 @@ impl PeerSet {
 	}
 }
 
-/// A small and nifty collection that allows to store data pertaining to each vine set.
+/// A small and nifty collection that allows to store data pertaining to each peer set.
 #[derive(Debug, Default)]
 pub struct PerPeerSet<T> {
 	validation: T,
@@ -183,14 +183,14 @@ impl<T> IndexMut<PeerSet> for PerPeerSet<T> {
 	}
 }
 
-/// Get `NonDefaultSetConfig`s for all available vine sets, at their default versions.
+/// Get `NonDefaultSetConfig`s for all available peer sets, at their default versions.
 ///
 /// Should be used during network configuration (added to [`NetworkConfiguration::extra_sets`])
 /// or shortly after startup to register the protocols with the network service.
 pub fn peer_sets_info(
 	is_authority: IsAuthority,
 	peerset_protocol_names: &PeerSetProtocolNames,
-) -> Vec<sc_network_common::config::NonDefaultSetConfig> {
+) -> Vec<NonDefaultSetConfig> {
 	PeerSet::iter()
 		.map(|s| s.get_info(is_authority, &peerset_protocol_names))
 		.collect()
@@ -459,7 +459,7 @@ mod tests {
 			Some((PeerSet::Validation, TestVersion(1).into())),
 		);
 
-		let validation_legacy = "/vine/validation/1";
+		let validation_legacy = "/polkadot/validation/1";
 		assert_eq!(
 			protocol_names.try_get_protocol(&validation_legacy.into()),
 			Some((PeerSet::Validation, TestVersion(1).into())),
@@ -472,7 +472,7 @@ mod tests {
 			Some((PeerSet::Collation, TestVersion(1).into())),
 		);
 
-		let collation_legacy = "/vine/collation/1";
+		let collation_legacy = "/polkadot/collation/1";
 		assert_eq!(
 			protocol_names.try_get_protocol(&collation_legacy.into()),
 			Some((PeerSet::Collation, TestVersion(1).into())),

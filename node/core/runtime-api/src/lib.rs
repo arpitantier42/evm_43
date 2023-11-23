@@ -1,18 +1,18 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Implements the Runtime API Subsystem
 //!
@@ -22,13 +22,13 @@
 #![deny(unused_crate_dependencies)]
 #![warn(missing_docs)]
 
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	errors::RuntimeApiError,
 	messages::{RuntimeApiMessage, RuntimeApiRequest as Request},
 	overseer, FromOrchestra, OverseerSignal, SpawnedSubsystem, SubsystemError, SubsystemResult,
 };
-use vine_node_subsystem_types::RuntimeApiSubsystemClient;
-use vine_primitives::v2::Hash;
+use polkadot_node_subsystem_types::RuntimeApiSubsystemClient;
+use polkadot_primitives::Hash;
 
 use cache::{RequestResult, RequestResultCache};
 use futures::{channel::oneshot, prelude::*, select, stream::FuturesUnordered};
@@ -49,7 +49,7 @@ const LOG_TARGET: &str = "parachain::runtime-api";
 const MAX_PARALLEL_REQUESTS: usize = 4;
 
 /// The name of the blocking task that executes a runtime API request.
-const API_REQUEST_TASK_NAME: &str = "vine-runtime-api-request";
+const API_REQUEST_TASK_NAME: &str = "polkadot-runtime-api-request";
 
 /// The `RuntimeApiSubsystem`. See module docs for more details.
 pub struct RuntimeApiSubsystem<Client> {
@@ -132,6 +132,8 @@ where
 				.cache_candidate_pending_availability((relay_parent, para_id), candidate),
 			CandidateEvents(relay_parent, events) =>
 				self.requests_cache.cache_candidate_events(relay_parent, events),
+			SessionExecutorParams(_relay_parent, session_index, index) =>
+				self.requests_cache.cache_session_executor_params(session_index, index),
 			SessionInfo(_relay_parent, session_index, info) =>
 				if let Some(info) = info {
 					self.requests_cache.cache_session_info(session_index, info);
@@ -229,6 +231,17 @@ where
 					.map(|sender| Request::CandidatePendingAvailability(para, sender)),
 			Request::CandidateEvents(sender) =>
 				query!(candidate_events(), sender).map(|sender| Request::CandidateEvents(sender)),
+			Request::SessionExecutorParams(session_index, sender) => {
+				if let Some(executor_params) =
+					self.requests_cache.session_executor_params(session_index)
+				{
+					self.metrics.on_cached_request();
+					let _ = sender.send(Ok(executor_params.clone()));
+					None
+				} else {
+					Some(Request::SessionExecutorParams(session_index, sender))
+				}
+			},
 			Request::SessionInfo(index, sender) => {
 				if let Some(info) = self.requests_cache.session_info(index) {
 					self.metrics.on_cached_request();
@@ -267,7 +280,7 @@ where
 		let metrics = self.metrics.clone();
 		let (sender, receiver) = oneshot::channel();
 
-		// TODO: make the cache great again https://github.com/paritytech/vine/issues/5546
+		// TODO: make the cache great again https://github.com/paritytech/polkadot/issues/5546
 		let request = match self.query_cache(relay_parent, request) {
 			Some(request) => request,
 			None => return,
@@ -447,39 +460,14 @@ where
 		),
 		Request::CandidateEvents(sender) =>
 			query!(CandidateEvents, candidate_events(), ver = 1, sender),
-		Request::SessionInfo(index, sender) => {
-			let api_version = client
-				.api_version_parachain_host(relay_parent)
-				.await
-				.unwrap_or_default()
-				.unwrap_or_default();
-
-			let res = if api_version >= 2 {
-				let res = client.session_info(relay_parent, index).await.map_err(|e| {
-					RuntimeApiError::Execution {
-						runtime_api_name: "SessionInfo",
-						source: std::sync::Arc::new(e),
-					}
-				});
-				metrics.on_request(res.is_ok());
-				res
-			} else {
-				#[allow(deprecated)]
-				let res = client.session_info_before_version_2(relay_parent, index).await.map_err(|e| {
-					RuntimeApiError::Execution {
-						runtime_api_name: "SessionInfo",
-						source: std::sync::Arc::new(e),
-					}
-				});
-				metrics.on_request(res.is_ok());
-
-				res.map(|r| r.map(|old| old.into()))
-			};
-
-			let _ = sender.send(res.clone());
-
-			res.ok().map(|res| RequestResult::SessionInfo(relay_parent, index, res))
-		},
+		Request::SessionInfo(index, sender) =>
+			query!(SessionInfo, session_info(index), ver = 2, sender),
+		Request::SessionExecutorParams(session_index, sender) => query!(
+			SessionExecutorParams,
+			session_executor_params(session_index),
+			ver = Request::EXECUTOR_PARAMS_RUNTIME_REQUIREMENT,
+			sender
+		),
 		Request::DmqContents(id, sender) => query!(DmqContents, dmq_contents(id), ver = 1, sender),
 		Request::InboundHrmpChannelsContents(id, sender) =>
 			query!(InboundHrmpChannelsContents, inbound_hrmp_channels_contents(id), ver = 1, sender),

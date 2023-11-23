@@ -18,7 +18,7 @@ The block author can choose 0 or 1 backed parachain candidates per parachain; th
 
 ### Misbehavior Reports
 
-Misbehavior reports are self-contained proofs of misbehavior by a validator or group of validators. For example, it is very easy to verify a double-voting misbehavior report: the report contains two votes signed by the same key, advocating different outcomes. Concretely, misbehavior reports become inherents which cause peers to be slashed.
+Misbehavior reports are self-contained proofs of misbehavior by a validator or group of validators. For example, it is very easy to verify a double-voting misbehavior report: the report contains two votes signed by the same key, advocating different outcomes. Concretely, misbehavior reports become inherents which cause dots to be slashed.
 
 Note that there is no mechanism in place which forces a block author to include a misbehavior report which it doesn't like, for example if it would be slashed by such a report. The chain's defense against this is to have a relatively long slash period, such that it's likely to encounter an honest author before the slash period expires.
 
@@ -30,7 +30,14 @@ Dispute resolution is complex and is explained in substantially more detail [her
 
 ## Protocol
 
-Input: [`ProvisionerMessage`](../../types/overseer-protocol.md#provisioner-message). Backed candidates come from the [Candidate Backing subsystem](../backing/candidate-backing.md), signed bitfields come from the [Bitfield Distribution subsystem](../availability/bitfield-distribution.md), and misbehavior reports and disputes come from the [Misbehavior Arbitration subsystem](misbehavior-arbitration.md).
+Input: [`ProvisionerMessage`](../../types/overseer-protocol.md#provisioner-message). Backed candidates come from the [Candidate Backing subsystem](../backing/candidate-backing.md), signed bitfields come from the [Bitfield Distribution subsystem](../availability/bitfield-distribution.md), and disputes come from the [Disputes Subsystem](../disputes/dispute-coordinator.md). Misbehavior reports are currently sent from the [Candidate Backing subsystem](../backing/candidate-backing.md) and contain the following misbehaviors:
+
+1. `Misbehavior::ValidityDoubleVote`
+2. `Misbehavior::MultipleCandidates`
+3. `Misbehavior::UnauthorizedStatement`
+4. `Misbehavior::DoubleSign`
+
+But we choose not to punish these forms of misbehavior for the time being. Risks from misbehavior are sufficiently mitigated at the protocol level via reputation changes. Punitive actions here may become desirable enough to dedicate time to in the future.
 
 At initialization, this subsystem has no outputs.
 
@@ -73,7 +80,7 @@ The end result of this process is a vector of `BackedCandidate`s, sorted in orde
 
 This is the point at which the block author provides further votes to active disputes or initiates new disputes in the runtime state.
 
-The block-authoring logic of the runtime has an extra step between handling the inherent-data and producing the actual inherent call, which we assume performs the work of filtering out disputes which are not relevant to the on-chain state.
+The block-authoring logic of the runtime has an extra step between handling the inherent-data and producing the actual inherent call, which we assume performs the work of filtering out disputes which are not relevant to the on-chain state. Backing votes are always kept in the dispute statement set. This ensures we punish the maximum number of misbehaving backers.
 
 To select disputes:
 

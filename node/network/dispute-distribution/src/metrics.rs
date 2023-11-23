@@ -1,20 +1,20 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use vine_node_subsystem_util::{
+use polkadot_node_subsystem_util::{
 	metrics,
 	metrics::{
 		prometheus,
@@ -93,7 +93,7 @@ impl metrics::Metrics for Metrics {
 			sent_requests: prometheus::register(
 				CounterVec::new(
 					Opts::new(
-						"vine_parachain_dispute_distribution_sent_requests",
+						"polkadot_parachain_dispute_distribution_sent_requests",
 						"Total number of sent requests.",
 					),
 					&["success"],
@@ -102,7 +102,7 @@ impl metrics::Metrics for Metrics {
 			)?,
 			received_requests: prometheus::register(
 				Counter::new(
-					"vine_parachain_dispute_distribution_received_requests",
+					"polkadot_parachain_dispute_distribution_received_requests",
 					"Total number of received dispute requests.",
 				)?,
 				registry,
@@ -110,7 +110,7 @@ impl metrics::Metrics for Metrics {
 			imported_requests: prometheus::register(
 				CounterVec::new(
 					Opts::new(
-						"vine_parachain_dispute_distribution_imported_requests",
+						"polkadot_parachain_dispute_distribution_imported_requests",
 						"Total number of imported requests.",
 					),
 					&["success"],
@@ -119,7 +119,7 @@ impl metrics::Metrics for Metrics {
 			)?,
 			time_dispute_request: prometheus::register(
 				prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
-					"vine_parachain_dispute_distribution_time_dispute_request",
+					"polkadot_parachain_dispute_distribution_time_dispute_request",
 					"Time needed for dispute votes to get confirmed/fail getting transmitted.",
 				))?,
 				registry,

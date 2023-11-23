@@ -1,18 +1,18 @@
-// Copyright 2022 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Grid topology support implementation
 //! The basic operation of the 2D grid topology is that:
@@ -30,7 +30,7 @@
 //!
 
 use crate::PeerId;
-use vine_primitives::v2::{AuthorityDiscoveryId, SessionIndex, ValidatorIndex};
+use polkadot_primitives::{AuthorityDiscoveryId, SessionIndex, ValidatorIndex};
 use rand::{CryptoRng, Rng};
 use std::{
 	collections::{hash_map, HashMap, HashSet},
@@ -48,10 +48,10 @@ pub const DEFAULT_RANDOM_SAMPLE_RATE: usize = crate::MIN_GOSSIP_PEERS;
 /// The number of peers to randomly propagate messages to.
 pub const DEFAULT_RANDOM_CIRCULATION: usize = 4;
 
-/// Information about a vine in the gossip topology for a session.
+/// Information about a peer in the gossip topology for a session.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopologyPeerInfo {
-	/// The validator's known vine IDs.
+	/// The validator's known peer IDs.
 	pub peer_ids: Vec<PeerId>,
 	/// The index of the validator in the discovery keys of the corresponding
 	/// `SessionInfo`. This can extend _beyond_ the set of active parachain validators.
@@ -78,7 +78,7 @@ impl SessionGridTopology {
 		SessionGridTopology { shuffled_indices, canonical_shuffling }
 	}
 
-	/// Produces the outgoing routing logic for a particular vine.
+	/// Produces the outgoing routing logic for a particular peer.
 	///
 	/// Returns `None` if the validator index is out of bounds.
 	pub fn compute_grid_neighbors_for(&self, v: ValidatorIndex) -> Option<GridNeighbors> {
@@ -192,7 +192,7 @@ impl GridNeighbors {
 		}
 	}
 
-	/// Given the originator of a message as a vine index, indicates the part of the topology
+	/// Given the originator of a message as a peer index, indicates the part of the topology
 	/// we're meant to send the message to.
 	pub fn required_routing_by_peer_id(&self, originator: PeerId, local: bool) -> RequiredRouting {
 		if local {
@@ -220,12 +220,12 @@ impl GridNeighbors {
 	/// Get a filter function based on this topology and the required routing
 	/// which returns `true` for peers that are within the required routing set
 	/// and false otherwise.
-	pub fn route_to_peer(&self, required_routing: RequiredRouting, vine: &PeerId) -> bool {
+	pub fn route_to_peer(&self, required_routing: RequiredRouting, peer: &PeerId) -> bool {
 		match required_routing {
 			RequiredRouting::All => true,
-			RequiredRouting::GridX => self.peers_x.contains(vine),
-			RequiredRouting::GridY => self.peers_y.contains(vine),
-			RequiredRouting::GridXY => self.peers_x.contains(vine) || self.peers_y.contains(vine),
+			RequiredRouting::GridX => self.peers_x.contains(peer),
+			RequiredRouting::GridY => self.peers_y.contains(peer),
+			RequiredRouting::GridXY => self.peers_x.contains(peer) || self.peers_y.contains(peer),
 			RequiredRouting::None | RequiredRouting::PendingTopology => false,
 		}
 	}
@@ -429,8 +429,8 @@ impl Default for RandomRouting {
 }
 
 impl RandomRouting {
-	/// Perform random sampling for a specific vine
-	/// Returns `true` for a lucky vine
+	/// Perform random sampling for a specific peer
+	/// Returns `true` for a lucky peer
 	pub fn sample(&self, n_peers_total: usize, rng: &mut (impl CryptoRng + Rng)) -> bool {
 		if n_peers_total == 0 || self.sent >= self.target {
 			false

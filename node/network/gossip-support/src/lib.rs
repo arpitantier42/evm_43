@@ -1,18 +1,18 @@
-// Copyright 2021 Parity Technologies (UK) Ltd.
-// This file is part of vine.
+// Copyright (C) Parity Technologies (UK) Ltd.
+// This file is part of Polkadot.
 
-// vine is free software: you can redistribute it and/or modify
+// Polkadot is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// vine is distributed in the hope that it will be useful,
+// Polkadot is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with vine.  If not, see <http://www.gnu.org/licenses/>.
+// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 //! This subsystem is responsible for keeping track of session changes
 //! and issuing a connection request to the relevant validators
@@ -36,24 +36,22 @@ use rand::{seq::SliceRandom as _, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 use sc_network::Multiaddr;
-use sp_application_crypto::{AppKey, ByteArray};
-use sp_keystore::{CryptoStore, SyncCryptoStorePtr};
+use sp_application_crypto::{AppCrypto, ByteArray};
+use sp_keystore::{Keystore, KeystorePtr};
 
-use vine_node_network_protocol::{
+use polkadot_node_network_protocol::{
 	authority_discovery::AuthorityDiscovery, peer_set::PeerSet, GossipSupportNetworkMessage,
 	PeerId, Versioned,
 };
-use vine_node_subsystem::{
+use polkadot_node_subsystem::{
 	messages::{
 		GossipSupportMessage, NetworkBridgeEvent, NetworkBridgeRxMessage, NetworkBridgeTxMessage,
 		RuntimeApiMessage, RuntimeApiRequest,
 	},
 	overseer, ActiveLeavesUpdate, FromOrchestra, OverseerSignal, SpawnedSubsystem, SubsystemError,
 };
-use vine_node_subsystem_util as util;
-use vine_primitives::v2::{
-	AuthorityDiscoveryId, Hash, SessionIndex, SessionInfo, ValidatorIndex,
-};
+use polkadot_node_subsystem_util as util;
+use polkadot_primitives::{AuthorityDiscoveryId, Hash, SessionIndex, SessionInfo, ValidatorIndex};
 
 #[cfg(test)]
 mod tests;
@@ -70,10 +68,10 @@ const BACKOFF_DURATION: Duration = Duration::from_secs(5);
 /// Duration after which we consider low connectivity a problem.
 ///
 /// Especially at startup low connectivity is expected (authority discovery cache needs to be
-/// populated). Authority discovery on  takes around 8 minutes, so warning after 10 minutes
+/// populated). Authority discovery on Kusama takes around 8 minutes, so warning after 10 minutes
 /// should be fine:
 ///
-/// ssh://git@github.com/Vine-Inc/vine-substrate.git/blob/fc49802f263529160635471c8a17888846035f5d/client/authority-discovery/src/lib.rs#L88
+/// https://github.com/paritytech/substrate/blob/fc49802f263529160635471c8a17888846035f5d/client/authority-discovery/src/lib.rs#L88
 const LOW_CONNECTIVITY_WARN_DELAY: Duration = Duration::from_secs(600);
 
 /// If connectivity is lower than this in percent, issue warning in logs.
@@ -81,7 +79,7 @@ const LOW_CONNECTIVITY_WARN_THRESHOLD: usize = 90;
 
 /// The Gossip Support subsystem.
 pub struct GossipSupport<AD> {
-	keystore: SyncCryptoStorePtr,
+	keystore: KeystorePtr,
 
 	last_session_index: Option<SessionIndex>,
 	// Some(timestamp) if we failed to resolve
@@ -120,7 +118,7 @@ where
 	AD: AuthorityDiscovery,
 {
 	/// Create a new instance of the [`GossipSupport`] subsystem.
-	pub fn new(keystore: SyncCryptoStorePtr, authority_discovery: AD, metrics: Metrics) -> Self {
+	pub fn new(keystore: KeystorePtr, authority_discovery: AD, metrics: Metrics) -> Self {
 		// Initialize metrics to `0`.
 		metrics.on_is_not_authority();
 		metrics.on_is_not_parachain_validator();
@@ -250,7 +248,7 @@ where
 
 					// Remove all of our locally controlled validator indices so we don't connect to ourself.
 					let connections =
-						if remove_all_controlled(&self.keystore, &mut connections).await != 0 {
+						if remove_all_controlled(&self.keystore, &mut connections) != 0 {
 							connections
 						} else {
 							// If we control none of them, issue an empty connection request
@@ -262,7 +260,7 @@ where
 
 				if is_new_session {
 					// Gossip topology is only relevant for authorities in the current session.
-					let our_index = self.get_key_index_and_update_metrics(&session_info).await?;
+					let our_index = self.get_key_index_and_update_metrics(&session_info)?;
 
 					update_gossip_topology(
 						sender,
@@ -278,15 +276,15 @@ where
 		Ok(())
 	}
 
-	// Checks if the node is an authority and also updates `peer_node_is_authority` and
-	// `peer_node_is_parachain_validator` metrics accordingly.
+	// Checks if the node is an authority and also updates `polkadot_node_is_authority` and
+	// `polkadot_node_is_parachain_validator` metrics accordingly.
 	// On success, returns the index of our keys in `session_info.discovery_keys`.
-	async fn get_key_index_and_update_metrics(
+	fn get_key_index_and_update_metrics(
 		&mut self,
 		session_info: &SessionInfo,
 	) -> Result<usize, util::Error> {
 		let authority_check_result =
-			ensure_i_am_an_authority(&self.keystore, &session_info.discovery_keys).await;
+			ensure_i_am_an_authority(&self.keystore, &session_info.discovery_keys);
 
 		match authority_check_result.as_ref() {
 			Ok(index) => {
@@ -298,7 +296,7 @@ where
 
 				// First `maxValidators` entries are the parachain validators. We'll check
 				// if our index is in this set to avoid searching for the keys.
-				// https://github.com/paritytech/vine/blob/a52dca2be7840b23c19c153cf7e110b1e3e475f8/runtime/parachains/src/configuration.rs#L148
+				// https://github.com/paritytech/polkadot/blob/a52dca2be7840b23c19c153cf7e110b1e3e475f8/runtime/parachains/src/configuration.rs#L148
 				if *index < parachain_validators_this_session {
 					gum::trace!(target: LOG_TARGET, "We are now a parachain validator",);
 					self.metrics.on_is_parachain_validator();
@@ -424,7 +422,7 @@ where
 			.filter(|(a, _)| !self.connected_authorities.contains_key(a));
 		// TODO: Make that warning once connectivity issues are fixed (no point in warning, if
 		// we already know it is broken.
-		// https://github.com/paritytech/vine/issues/3921
+		// https://github.com/paritytech/polkadot/issues/3921
 		if connected_ratio <= LOW_CONNECTIVITY_WARN_THRESHOLD {
 			gum::debug!(
 				target: LOG_TARGET,
@@ -459,12 +457,12 @@ async fn authorities_past_present_future(
 
 /// Return an error if we're not a validator in the given set (do not have keys).
 /// Otherwise, returns the index of our keys in `authorities`.
-async fn ensure_i_am_an_authority(
-	keystore: &SyncCryptoStorePtr,
+fn ensure_i_am_an_authority(
+	keystore: &KeystorePtr,
 	authorities: &[AuthorityDiscoveryId],
 ) -> Result<usize, util::Error> {
 	for (i, v) in authorities.iter().enumerate() {
-		if CryptoStore::has_keys(&**keystore, &[(v.to_raw_vec(), AuthorityDiscoveryId::ID)]).await {
+		if Keystore::has_keys(&**keystore, &[(v.to_raw_vec(), AuthorityDiscoveryId::ID)]) {
 			return Ok(i)
 		}
 	}
@@ -472,13 +470,13 @@ async fn ensure_i_am_an_authority(
 }
 
 /// Filter out all controlled keys in the given set. Returns the number of keys removed.
-async fn remove_all_controlled(
-	keystore: &SyncCryptoStorePtr,
+fn remove_all_controlled(
+	keystore: &KeystorePtr,
 	authorities: &mut Vec<AuthorityDiscoveryId>,
 ) -> usize {
 	let mut to_remove = Vec::new();
 	for (i, v) in authorities.iter().enumerate() {
-		if CryptoStore::has_keys(&**keystore, &[(v.to_raw_vec(), AuthorityDiscoveryId::ID)]).await {
+		if Keystore::has_keys(&**keystore, &[(v.to_raw_vec(), AuthorityDiscoveryId::ID)]) {
 			to_remove.push(i);
 		}
 	}
@@ -497,7 +495,7 @@ async fn remove_all_controlled(
 /// but formed randomly via BABE randomness from two epochs ago.
 /// This limits the amount of gossip peers to 2 * `sqrt(len)` and ensures the diameter of 2.
 ///
-/// [web3]: https://research.web3.foundation/en/latest/vine/networking/3-avail-valid.html#topology
+/// [web3]: https://research.web3.foundation/en/latest/polkadot/networking/3-avail-valid.html#topology
 async fn update_gossip_topology(
 	sender: &mut impl overseer::GossipSupportSenderTrait,
 	our_index: usize,
@@ -509,7 +507,7 @@ async fn update_gossip_topology(
 	let random_seed = {
 		let (tx, rx) = oneshot::channel();
 
-		// TODO https://github.com/paritytech/vine/issues/5316:
+		// TODO https://github.com/paritytech/polkadot/issues/5316:
 		// get the random seed from the `SessionInfo` instead.
 		sender
 			.send_message(RuntimeApiMessage::Request(
