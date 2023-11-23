@@ -2392,6 +2392,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethereum"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e04d24d20b8ff2235cffbf242d5092de3aa45f77c5270ddbfadd2778ca13fea"
+dependencies = [
+ "bytes",
+ "ethereum-types",
+ "hash-db 0.16.0",
+ "hash256-std-hasher",
+ "parity-scale-codec",
+ "rlp",
+ "scale-info",
+ "serde",
+ "sha3",
+ "trie-root",
+]
+
+[[package]]
 name = "ethereum-types"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2420,7 +2438,7 @@ source = "git+https://github.com/rust-blockchain/evm?rev=b7b82c7e1fc57b7449d6dfa
 dependencies = [
  "auto_impl",
  "environmental",
- "ethereum",
+ "ethereum 0.14.0",
  "evm-core",
  "evm-gasometer",
  "evm-runtime",
@@ -2637,7 +2655,7 @@ name = "fc-db"
 version = "2.0.0-dev"
 dependencies = [
  "async-trait",
- "ethereum",
+ "ethereum 0.15.0",
  "fc-storage",
  "fp-consensus 2.0.0-dev",
  "fp-rpc 3.0.0-dev",
@@ -2670,7 +2688,7 @@ dependencies = [
 name = "fc-mapping-sync"
 version = "2.0.0-dev"
 dependencies = [
- "ethereum",
+ "ethereum 0.15.0",
  "ethereum-types",
  "fc-db",
  "fc-storage",
@@ -2703,7 +2721,7 @@ dependencies = [
 name = "fc-rpc"
 version = "2.0.0-dev"
 dependencies = [
- "ethereum",
+ "ethereum 0.15.0",
  "ethereum-types",
  "evm",
  "fc-db",
@@ -2756,7 +2774,7 @@ dependencies = [
 name = "fc-rpc-core"
 version = "1.1.0-dev"
 dependencies = [
- "ethereum",
+ "ethereum 0.15.0",
  "ethereum-types",
  "jsonrpsee",
  "rustc-hex",
@@ -2768,7 +2786,7 @@ dependencies = [
 name = "fc-storage"
 version = "1.0.0-dev"
 dependencies = [
- "ethereum",
+ "ethereum 0.15.0",
  "ethereum-types",
  "fp-rpc 3.0.0-dev",
  "fp-storage 2.0.0",
@@ -3018,7 +3036,7 @@ dependencies = [
 name = "fp-consensus"
 version = "2.0.0-dev"
 dependencies = [
- "ethereum",
+ "ethereum 0.15.0",
  "parity-scale-codec",
  "sp-core 7.0.0",
  "sp-runtime 7.0.0",
@@ -3030,7 +3048,7 @@ name = "fp-consensus"
 version = "2.0.0-dev"
 source = "git+https://github.com/paritytech/frontier.git?branch=polkadot-v1.1.0#24cd3ea75262a33481d59d54de9746723ef298fb"
 dependencies = [
- "ethereum",
+ "ethereum 0.14.0",
  "parity-scale-codec",
  "sp-core 21.0.0",
  "sp-runtime 24.0.0",
@@ -3059,7 +3077,7 @@ dependencies = [
 name = "fp-ethereum"
 version = "1.0.0-dev"
 dependencies = [
- "ethereum",
+ "ethereum 0.15.0",
  "ethereum-types",
  "fp-evm 3.0.0-dev",
  "frame-support 4.0.0-dev (git+https://github.com/paritytech/substrate?branch=polkadot-v0.9.43)",
@@ -3073,7 +3091,7 @@ name = "fp-ethereum"
 version = "1.0.0-dev"
 source = "git+https://github.com/paritytech/frontier.git?branch=polkadot-v1.1.0#24cd3ea75262a33481d59d54de9746723ef298fb"
 dependencies = [
- "ethereum",
+ "ethereum 0.14.0",
  "ethereum-types",
  "fp-evm 3.0.0-dev (git+https://github.com/paritytech/frontier.git?branch=polkadot-v1.1.0)",
  "frame-support 4.0.0-dev (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.1.0)",
@@ -3115,7 +3133,7 @@ dependencies = [
 name = "fp-rpc"
 version = "3.0.0-dev"
 dependencies = [
- "ethereum",
+ "ethereum 0.15.0",
  "ethereum-types",
  "fp-evm 3.0.0-dev",
  "parity-scale-codec",
@@ -3132,7 +3150,7 @@ name = "fp-rpc"
 version = "3.0.0-dev"
 source = "git+https://github.com/paritytech/frontier.git?branch=polkadot-v1.1.0#24cd3ea75262a33481d59d54de9746723ef298fb"
 dependencies = [
- "ethereum",
+ "ethereum 0.14.0",
  "ethereum-types",
  "fp-evm 3.0.0-dev (git+https://github.com/paritytech/frontier.git?branch=polkadot-v1.1.0)",
  "parity-scale-codec",
@@ -7033,7 +7051,7 @@ dependencies = [
 name = "pallet-ethereum"
 version = "4.0.0-dev"
 dependencies = [
- "ethereum",
+ "ethereum 0.15.0",
  "ethereum-types",
  "evm",
  "fp-consensus 2.0.0-dev",
@@ -7063,7 +7081,7 @@ name = "pallet-ethereum"
 version = "4.0.0-dev"
 source = "git+https://github.com/paritytech/frontier.git?branch=polkadot-v1.1.0#24cd3ea75262a33481d59d54de9746723ef298fb"
 dependencies = [
- "ethereum",
+ "ethereum 0.14.0",
  "ethereum-types",
  "evm",
  "fp-consensus 2.0.0-dev (git+https://github.com/paritytech/frontier.git?branch=polkadot-v1.1.0)",
