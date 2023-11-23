@@ -1,0 +1,24 @@
+[package]
+name = "vine-node-subsystem-types"
+description = "Subsystem traits and message definitions"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+derive_more = "0.99.17"
+futures = "0.3.21"
+vine-primitives = { path = "../../primitives" }
+vine-node-primitives = { path = "../primitives" }
+vine-node-network-protocol = { path = "../network/protocol" }
+vine-statement-table = { path = "../../statement-table" }
+vine-node-jaeger = { path = "../jaeger" }
+orchestra = "0.0.2"
+sc-network = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-api = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-consensus-babe = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-authority-discovery = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+smallvec = "1.8.0"
+substrate-prometheus-endpoint = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+thiserror = "1.0.31"
+async-trait = "0.1.57"

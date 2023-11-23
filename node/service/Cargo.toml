@@ -1,0 +1,221 @@
+[package]
+name = "vine-service"
+rust-version = "1.60"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Substrate Client
+sc-authority-discovery = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+babe = { package = "sc-consensus-babe", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+beefy-primitives = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git" , package="sp-beefy",branch = "mainnet-peer" }
+beefy-gadget = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+frame-support = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+grandpa = { package = "sc-finality-grandpa", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+mmr-gadget = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-mmr-primitives = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-block-builder = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-chain-spec = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-client-api = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-client-db = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-consensus = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-consensus-slots = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-executor = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-network = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-network-common = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-network-sync = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-transaction-pool = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-sync-state-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-keystore = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-basic-authorship = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-offchain = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-sysinfo = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+service = { package = "sc-service", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", default-features = false , branch = "mainnet-peer" }
+telemetry = { package = "sc-telemetry", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+
+# Substrate Primitives
+sp-authority-discovery = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-authorship = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+consensus_common = { package = "sp-consensus", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+grandpa_primitives = { package = "sp-finality-grandpa", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+inherents = { package = "sp-inherents", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-api = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-block-builder = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-blockchain = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-core = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-io = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-keystore = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-offchain = { package = "sp-offchain", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-runtime = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-session = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-storage = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-transaction-pool = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-trie = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-timestamp = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-consensus-babe = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-state-machine = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+
+# Substrate Pallets
+pallet-babe = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+pallet-im-online = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+pallet-staking = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+pallet-transaction-payment-rpc-runtime-api = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+
+# Substrate Other
+frame-system-rpc-runtime-api = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+prometheus-endpoint = { package = "substrate-prometheus-endpoint", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+
+# External Crates
+futures = "0.3.21"
+hex-literal = "0.3.4"
+gum = { package = "tracing-gum", path = "../gum/" }
+serde = { version = "1.0.137", features = ["derive"] }
+serde_json = "1.0.81"
+thiserror = "1.0.31"
+kvdb = "0.13.0"
+kvdb-rocksdb = { version = "0.17.0", optional = true }
+parity-db = { version = "0.4.2", optional = true }
+
+async-trait = "0.1.57"
+lru = "0.8"
+
+# vine
+vine-node-core-parachains-inherent = { path = "../core/parachains-inherent" }
+vine-overseer = { path = "../overseer" }
+vine-client = { path = "../client", default-features = false, optional = true }
+vine-parachain = { path = "../../parachain" }
+vine-primitives = { path = "../../primitives" }
+vine-node-primitives = { path = "../primitives" }
+vine-rpc= { path = "../../rpc" }
+vine-node-subsystem = {path = "../subsystem" }
+vine-node-subsystem-util = { path = "../subsystem-util" }
+vine-node-subsystem-types = { path = "../subsystem-types" }
+vine-runtime-parachains = { path = "../../runtime/parachains" }
+vine-node-network-protocol = { path = "../network/protocol" }
+
+# vine Runtime Constants
+vine_runtime_constants = { path = "../../runtime/vine/constants", optional = true }
+
+# vine Runtimes
+vine-runtime = { path = "../../runtime/vine", optional = true }
+
+# vine Subsystems
+vine-approval-distribution = { path = "../network/approval-distribution", optional = true }
+vine-availability-bitfield-distribution = { path = "../network/bitfield-distribution", optional = true }
+vine-availability-distribution = { path = "../network/availability-distribution", optional = true }
+vine-availability-recovery = { path = "../network/availability-recovery", optional = true }
+vine-collator-protocol = { path = "../network/collator-protocol", optional = true }
+vine-dispute-distribution = { path = "../network/dispute-distribution", optional = true }
+vine-gossip-support = { path = "../network/gossip-support", optional = true }
+vine-network-bridge = { path = "../network/bridge", optional = true }
+vine-node-collation-generation = { path = "../collation-generation", optional = true }
+vine-node-core-approval-voting = { path = "../core/approval-voting", optional = true }
+vine-node-core-av-store = { path = "../core/av-store", optional = true }
+vine-node-core-backing = { path = "../core/backing", optional = true }
+vine-node-core-bitfield-signing = { path = "../core/bitfield-signing", optional = true }
+vine-node-core-candidate-validation = { path = "../core/candidate-validation", optional = true }
+vine-node-core-chain-api = { path = "../core/chain-api", optional = true }
+vine-node-core-chain-selection = { path = "../core/chain-selection", optional = true }
+vine-node-core-dispute-coordinator = { path = "../core/dispute-coordinator", optional = true }
+vine-node-core-provisioner = { path = "../core/provisioner", optional = true }
+vine-node-core-pvf-checker = { path = "../core/pvf-checker", optional = true }
+vine-node-core-runtime-api = { path = "../core/runtime-api", optional = true }
+vine-statement-distribution = { path = "../network/statement-distribution", optional = true }
+
+# RPC
+jsonrpsee = { version = "0.16.2", features = ["server"] }
+sc-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-consensus-babe-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-consensus-epochs = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sc-finality-grandpa-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+
+txpool-api = { package = "sc-transaction-pool-api", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+frame-rpc-system = { package = "substrate-frame-rpc-system", git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+mmr-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+beefy-gadget-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+substrate-state-trie-migration-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+pallet-transaction-payment-rpc = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+
+# vine-runtime = { version = "3.0.0-dev", path = "../runtime/vine" }
+
+# Frontier
+fc-cli = { path = "../../evm-client/cli" }
+fc-consensus = { path = "../../evm-client/consensus" }
+fc-db = { path = "../../evm-client/db" }
+fc-mapping-sync = { path = "../../evm-client/mapping-sync" }
+fc-rpc = { path = "../../evm-client/rpc" }
+fc-rpc-core = { path = "../../evm-client/rpc-core" }
+fp-consensus = { path = "../../evm-primitives/consensus" }
+fp-dynamic-fee = { path = "../../evm-primitives/dynamic-fee" }
+fp-evm = { path = "../../evm-primitives/evm" }
+fp-rpc = { path = "../../evm-primitives/rpc" }
+fp-storage = { path = "../../evm-primitives/storage" }
+pallet-evm = {path = "../../evm-frame/evm"}
+pallet-ethereum = {path = "../../evm-frame/ethereum"}
+
+[dev-dependencies]
+vine-test-client = { path = "../test/client" }
+vine-node-subsystem-test-helpers = { path = "../subsystem-test-helpers" }
+env_logger = "0.9.0"
+log = "0.4.17"
+assert_matches = "1.5.0"
+tempfile = "3.2"
+
+[features]
+default = ["db", "full-node", "vine-native"]
+
+db = [
+	"service/rocksdb"
+]
+
+full-node = [
+	"vine-node-core-av-store",
+	"vine-node-core-approval-voting",
+	"vine-availability-bitfield-distribution",
+	"vine-availability-distribution",
+	"vine-availability-recovery",
+	"vine-client",
+	"vine-collator-protocol",
+	"vine-dispute-distribution",
+	"vine-gossip-support",
+	"vine-network-bridge",
+	"vine-node-collation-generation",
+	"vine-node-core-backing",
+	"vine-node-core-bitfield-signing",
+	"vine-node-core-candidate-validation",
+	"vine-node-core-chain-api",
+	"vine-node-core-chain-selection",
+	"vine-node-core-dispute-coordinator",
+	"vine-node-core-provisioner",
+	"vine-node-core-runtime-api",
+	"vine-statement-distribution",
+	"vine-approval-distribution",
+	"vine-node-core-pvf-checker",
+	"kvdb-rocksdb",
+	"parity-db",
+]
+
+# Configure the native runtimes to use. vine is enabled by default.
+#
+# Validators require the native runtime currently
+vine-native = [ "vine-runtime", "vine_runtime_constants", "vine-client/vine" ]
+
+runtime-benchmarks = [
+	"vine-runtime?/runtime-benchmarks",
+
+	"service/runtime-benchmarks",
+]
+try-runtime = [
+	"vine-runtime?/try-runtime",
+]
+fast-runtime = [
+	"vine-runtime?/fast-runtime",
+]
+
+malus = ["full-node"]
+runtime-metrics = [
+	"vine-client/runtime-metrics",
+	"vine-runtime?/runtime-metrics",
+	"vine-runtime-parachains/runtime-metrics"
+]

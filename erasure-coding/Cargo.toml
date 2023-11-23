@@ -1,0 +1,14 @@
+[package]
+name = "vine-erasure-coding"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+vine-primitives = { path = "../primitives" }
+vine-node-primitives = { package = "vine-node-primitives", path = "../node/primitives" }
+novelpoly = { package = "reed-solomon-novelpoly", version = "1.0.0" }
+parity-scale-codec = { version = "3.1.5", default-features = false, features = ["std", "derive"] }
+sp-core = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-trie = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+thiserror = "1.0.31"

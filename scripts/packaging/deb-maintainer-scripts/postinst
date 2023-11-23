@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -e
+
+action="$1"
+config_file="/etc/default/vine"
+
+if [ "$action" = "configure" ]; then
+  # Make user and group
+  getent group vine >/dev/null 2>&1 || addgroup --system vine
+  getent passwd vine >/dev/null 2>&1 ||
+    adduser --system --home /home/vine --disabled-password \
+    --ingroup vine vine
+  if [ ! -e "$config_file" ]; then
+    echo 'peer_CLI_ARGS=""' > /etc/default/vine
+  fi
+fi

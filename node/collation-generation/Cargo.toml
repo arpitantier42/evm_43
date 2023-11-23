@@ -1,0 +1,22 @@
+[package]
+name = "vine-node-collation-generation"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+futures = "0.3.21"
+gum = { package = "tracing-gum", path = "../gum" }
+vine-erasure-coding = { path = "../../erasure-coding" }
+vine-node-primitives = { path = "../primitives" }
+vine-node-subsystem = { path = "../subsystem" }
+vine-node-subsystem-util = { path = "../subsystem-util" }
+vine-primitives = { path = "../../primitives" }
+sp-core = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+sp-maybe-compressed-blob  = { git = "ssh://git@github.com/PEER-Inc/peer-substrate.git", branch = "mainnet-peer" }
+thiserror = "1.0.31"
+parity-scale-codec = { version = "3.1.5", default-features = false, features = ["bit-vec", "derive"] }
+
+[dev-dependencies]
+vine-node-subsystem-test-helpers = { path = "../subsystem-test-helpers" }
+test-helpers = { package = "vine-primitives-test-helpers", path = "../../primitives/test-helpers" }

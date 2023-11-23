@@ -1,0 +1,11 @@
+[package]
+name = "vine-node-subsystem"
+description = "Subsystem traits and message definitions and the generated overseer"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+vine-overseer = { path = "../overseer" }
+vine-node-subsystem-types = { path = "../subsystem-types" }
+vine-node-jaeger = { path = "../jaeger" }
